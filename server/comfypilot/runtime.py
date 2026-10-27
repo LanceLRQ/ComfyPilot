@@ -82,6 +82,23 @@ def write_runtime(project: Project, runtime: RuntimeRecord) -> None:
     temporary.replace(project.root / ".comfypilot/runtime.json")
 
 
+def require_instance(actual: RuntimeRecord | None, expected: RuntimeRecord) -> None:
+    if actual is None or (
+        actual.project_id,
+        actual.root,
+        actual.instance_id,
+        actual.api,
+        actual.port,
+    ) != (
+        expected.project_id,
+        expected.root,
+        expected.instance_id,
+        expected.api,
+        expected.port,
+    ):
+        raise ProjectError("connection_invalidated", "项目实例或进程身份已变化，请显式重新连接。")
+
+
 @contextmanager
 def project_lock(project: Project, name: str, *, timeout: float = 15):
     if os.name != "posix":

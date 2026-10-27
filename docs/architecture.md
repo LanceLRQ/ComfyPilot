@@ -65,6 +65,12 @@ M1/1.2 的本机实现：`start/status/stop/resume-dispatch` 共用项目生命�
 
 服务端仅接受自身项目 UUID。桥接器每次调用携带 project_root 与 connection_ref，不维护一个隐式全局“当前项目”。两个项目可独立运行；同项目多个桥接器共用一个实例。断开或替换实例后旧连接返回连接失效。
 
+M1/1.3 的实现位于 `server/comfypilot/mcp_bridge.py`，随同一个 wheel 发布 `comfypilot-mcp` 入口，使用官方 Python MCP SDK 2.3.0。初始化和工具枚举只构建静态 schema，不读取项目或访问网络。生命周期调用复用现有项目/服务用例；项目检查和连接仅读取文件，不借加载操作迁移数据库。启动服务不会自动连接。
+
+连接表仅位于各 MCP 进程内，引用固定规范根目录、项目 UUID、实例 ID、API 的 PID/启动时间/程序路径和端口；Worker 在同一 API 下恢复不使引用失效。读取状态先校验运行记录及健康回执，再读取网页共用的 `/api/project` 并核对其项目和实例。无引用或引用已断开返回 `service_not_connected`，跨项目返回 `project_mismatch`，实例或 API 身份变化返回 `connection_invalidated`。
+
+`stop_service` 是显式生命周期操作，无引用时停止给定目录的当前实例；携带引用时，在共享的项目控制锁内核对绑定实例后才暂停和停止，避免旧引用控制新实例。常驻启动者用后台等待线程回收自己启动且已退出的 API 子进程，避免其他桥接器把僵尸进程误判为停止超时；该线程不改变服务会话归属，不在 MCP 退出时终止平台。
+
 ## 3. 项目目录与配置
 
 以下为使用者项目的目标结构，不代表当前仓库已经生成这些文件：
@@ -354,7 +360,7 @@ Agent 可 read_events 或有上限的 wait_for_events，默认关注任务终态
 
 ## 11. MCP 与应用接口
 
-下表为拟定语义，不是已发布工具。业务接口始终限定当前项目，CLI、MCP 和 Web 调用共享 application 用例。
+M1/1.3 已实现六个生命周期工具及基础业务查询 `get_project_status`，其参数和错误见 [README](../README.md#stdio-mcp)。下表列出首版完整的拟定语义，其余工具尚未实现。业务接口始终限定当前项目，CLI、MCP 和 Web 调用共享 application 用例。
 
 | 操作组 | 拟定工具 | 约束 |
 | --- | --- | --- |

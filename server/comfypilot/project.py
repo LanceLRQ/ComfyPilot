@@ -187,20 +187,24 @@ def set_dispatch(project: Project, *, paused: bool, reason: str) -> None:
         )
 
 
-def load_project(root: Path) -> Project:
+def read_project(root: Path) -> Project:
     state = root / ".comfypilot"
     if not all(
         (root / name).is_file()
         for name in ["comfypilot.yaml", ".comfypilot/project.json", ".comfypilot/state.sqlite"]
     ):
         raise ProjectError("project_incomplete", "项目未初始化或文件不完整，请先初始化或检查备份。")
-    project = Project(
+    return Project(
         root=root,
         identity=ProjectIdentity.model_validate_json((state / "project.json").read_text("utf-8")),
         config=ProjectConfig.model_validate(
             yaml.safe_load((root / "comfypilot.yaml").read_text("utf-8"))
         ),
     )
+
+
+def load_project(root: Path) -> Project:
+    project = read_project(root)
     migrate_database(project)
     return project
 

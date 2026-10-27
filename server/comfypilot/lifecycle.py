@@ -3,6 +3,7 @@ import subprocess
 import sys
 import time
 from http.client import HTTPConnection, HTTPException
+from threading import Thread
 from uuid import uuid4
 
 import psutil
@@ -15,6 +16,7 @@ from comfypilot.runtime import (
     matching_process,
     project_lock,
     read_runtime,
+    require_instance,
 )
 
 
@@ -151,6 +153,8 @@ def start_service(project: Project, port: int) -> dict:
                                 raise
                         else:
                             if health.worker_ready and health.runtime.phase == "running":
+                                # 启动者可能是常驻 MCP；及时回收 API，供其他桥接器确认退出。
+                                Thread(target=process.wait, daemon=True).start()
                                 ready = True
                                 return {
                                     "status": "running",
@@ -168,9 +172,11 @@ def start_service(project: Project, port: int) -> dict:
                     process.wait(timeout=10)
 
 
-def stop_service(project: Project) -> dict:
+def stop_service(project: Project, *, expected: RuntimeRecord | None = None) -> dict:
     with project_lock(project, "control"):
         runtime = read_runtime(project)
+        if expected is not None:
+            require_instance(runtime, expected)
         if runtime and matching_process(project, runtime.api):
             health = inspect_service(project, runtime)
             set_dispatch(project, paused=True, reason="service_stopped")
