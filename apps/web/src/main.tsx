@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { z } from "zod";
+import { Monitor } from "./Monitor";
 import { Settings } from "./Settings";
 import "./style.css";
 
@@ -173,10 +174,11 @@ function App() {
               <br />
               <em>确定的位置。</em>
             </h2>
-            <p>已支持项目配置与多个执行端。生成、监测与审片将在后续阶段接入。</p>
+            <p>已支持项目配置、多个执行端与基础监测。生成与审片将在后续阶段接入。</p>
             <span className="stage">当前阶段：项目与连接</span>
           </article>
         </section>
+        <Monitor />
         <Settings />
         <footer>
           <span>仅本机访问 · 所有项目数据保存在当前目录</span>

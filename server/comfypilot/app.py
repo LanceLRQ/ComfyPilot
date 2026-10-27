@@ -16,8 +16,10 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from comfypilot.monitoring import get_target_status
 from comfypilot.project import Project, read_dispatch, read_project, set_dispatch
 from comfypilot.runtime import RuntimeRecord, ServiceHealth, process_identity, write_runtime
+from comfypilot.settings import get_project
 from comfypilot.settings_api import install_settings_routes
 
 
@@ -144,6 +146,28 @@ def create_app(project: Project, runtime: RuntimeRecord) -> FastAPI:
             instance_id=runtime.instance_id,
             dispatch=read_dispatch(project),
         )
+
+    @app.get("/api/status")
+    def monitoring():
+        current = get_project(project)
+        return {
+            "project_id": str(project.identity.project_id),
+            "instance_id": str(runtime.instance_id),
+            "data": {
+                "worker": worker_status().model_dump(mode="json"),
+                "dispatch": read_dispatch(project),
+                "targets": [
+                    get_target_status(
+                        project,
+                        runtime.instance_id,
+                        runtime.worker.pid if runtime.worker else 0,
+                        target["id"],
+                        current=current,
+                    )
+                    for target in current["config"]["targets"]
+                ],
+            },
+        }
 
     web = Path(__file__).parent / "web"
     if (web / "index.html").is_file():

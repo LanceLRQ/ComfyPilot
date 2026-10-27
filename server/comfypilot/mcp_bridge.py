@@ -21,7 +21,13 @@ from comfypilot.project import (
     resolve_project_root,
 )
 from comfypilot.runtime import RuntimeRecord, read_runtime, require_instance
-from comfypilot.settings_api import ConfigRequest, RevisionRequest, RouteRequest, TargetRequest
+from comfypilot.settings_api import (
+    ConfigRequest,
+    RevisionRequest,
+    RouteRequest,
+    TargetRequest,
+    TargetStatusRequest,
+)
 
 
 class ProjectArguments(BaseModel):
@@ -59,6 +65,10 @@ class RouteArguments(ConnectionArguments, RouteRequest):
     pass
 
 
+class TargetStatusArguments(ConnectionArguments, TargetStatusRequest):
+    pass
+
+
 class ToolError(BaseModel):
     code: str
     message: str
@@ -84,11 +94,32 @@ PROJECT_API = {
     "list_targets": ("GET", "/api/targets"),
     "update_target": ("POST", "/api/targets/update"),
     "resolve_target": ("POST", "/api/targets/resolve"),
+    "probe_target": ("POST", "/api/targets/probe"),
+    "get_target_status": ("POST", "/api/targets/status"),
+    "get_monitor_status": ("GET", "/api/status"),
 }
 
 
 # 仅定义静态协议元数据；不得在此探测项目、服务或 ComfyUI。
 TOOL_DEFINITIONS = {
+    "probe_target": (
+        TargetStatusArguments,
+        "显式探测指定执行端的标准接口与节点清单，不提交任务。",
+        True,
+        True,
+    ),
+    "get_target_status": (
+        TargetStatusArguments,
+        "读取指定目标最新监测快照，包含来源、过期时间与缺项。",
+        True,
+        True,
+    ),
+    "get_monitor_status": (
+        ConnectionArguments,
+        "读取项目 Worker、调度状态与各目标的统一监测快照。",
+        True,
+        True,
+    ),
     "inspect_project": (
         ProjectArguments,
         "只读检查指定目录是否初始化及项目身份，不连接或启动服务。",

@@ -3,6 +3,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from comfypilot.monitoring import TargetMonitor, get_target_status
 from comfypilot.project import ExecutionTarget, Project, ProjectConfig, ProjectError
 from comfypilot.runtime import RuntimeRecord
 from comfypilot.settings import (
@@ -30,6 +31,11 @@ class TargetRequest(RevisionRequest):
 class RouteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     target_id: str | None = None
+
+
+class TargetStatusRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    target_id: str = Field(min_length=1, max_length=64)
 
 
 def install_settings_routes(app: FastAPI, project: Project, runtime: RuntimeRecord) -> None:
@@ -112,3 +118,31 @@ def install_settings_routes(app: FastAPI, project: Project, runtime: RuntimeReco
     @app.post("/api/targets/resolve")
     def resolve(body: RouteRequest):
         return reply(resolve_target(project, body.target_id))
+
+    @app.post("/api/targets/status")
+    def status(body: TargetStatusRequest):
+        return reply(
+            get_target_status(
+                project,
+                runtime.instance_id,
+                runtime.worker.pid if runtime.worker else 0,
+                body.target_id,
+            )
+        )
+
+    @app.post("/api/targets/probe")
+    async def probe(body: TargetStatusRequest):
+        selected = resolve_target(project, body.target_id)
+        if not runtime.worker:
+            raise ProjectError("worker_unavailable", "Worker 尚未就绪，请稍后重试。")
+        monitor = TargetMonitor(
+            project,
+            runtime.instance_id,
+            runtime.worker.pid,
+            selected["config_revision"],
+            ExecutionTarget.model_validate(selected["target"]),
+        )
+        await monitor.poll()
+        return reply(
+            get_target_status(project, runtime.instance_id, runtime.worker.pid, body.target_id)
+        )

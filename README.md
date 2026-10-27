@@ -4,7 +4,7 @@
 
 产品目标：用户在 Claude Code、Codex 等工具里提需求，Agent 按 Skill 在当前项目目录启动 ComfyPilot，通过 MCP 管理任务与执行。用户打开浏览器看进度、审片和提出修改意见。生成可以交给本机或远程 ComfyUI。
 
-当前已实现 M1/1.1–1.4：项目服务、默认待机的 stdio MCP、显式连接，以及网页/MCP 共用的配置修订和多个执行端。Agent Skill、ComfyUI 探测及视频审片尚未接入。文档更新于 2026-10-27（Asia/Shanghai）。
+当前已实现 M1/1.1–1.5：项目服务、默认待机的 stdio MCP、显式连接，以及网页/MCP 共用的配置修订和多个执行端。已接入 ComfyUI 能力探测与基础状态快照；Agent Skill、生成与视频审片尚未接入。文档更新于 2026-10-27（Asia/Shanghai）。
 
 ## 本地开发与运行
 
@@ -93,7 +93,7 @@ CLI 必须显式传入绝对项目目录，不会猜测当前项目。`init` 可
 
 连接引用只存在于当前 MCP 进程中，允许同时连接多个项目。同项目的多个 MCP 进程复用平台实例，各自管理引用；退出宿主、终止 MCP 或断开连接后，后台 API/Worker 继续运行。
 
-配置工具还包括 `get_project`、`update_project`、`refresh_project`、`list_targets`、`update_target` 和 `resolve_target`，均要求显式项目与连接引用。写入传 `expected_revision`，配置冲突返回 `conflict`；网页保留当前草稿，可自行合并或明确重新读取。当前共 13 个工具，生成、事件和工作状态调整后续接入。
+配置工具还包括 `get_project`、`update_project`、`refresh_project`、`list_targets`、`update_target` 和 `resolve_target`，均要求显式项目与连接引用。写入传 `expected_revision`，配置冲突返回 `conflict`；网页保留当前草稿，可自行合并或明确重新读取。监测工具包括 `probe_target`、`get_target_status` 和 `get_monitor_status`。当前共 16 个工具，生成、业务事件和工作状态调整后续接入。
 
 ## 执行端与秘密文件
 
@@ -106,7 +106,15 @@ render-auth:
   Authorization: Bearer <由用户在本地填写>
 ```
 
-支持 `Authorization` 或 `X-API-Key`；公开配置和响应只显示引用及是否已配置。秘密文件应限制为本人可读并加入项目忽略规则；不要把凭据粘贴到普通配置或工作流。重复地址会给出合并提示，平台不会自动合并目标身份。当前只完成配置与路由，不因添加目标主动发起探测。
+支持 `Authorization` 或 `X-API-Key`；公开配置和响应只显示引用及是否已配置。秘密文件应限制为本人可读并加入项目忽略规则；不要把凭据粘贴到普通配置或工作流。重复地址会给出合并提示，平台不会自动合并目标身份。项目服务运行且执行端启用时，由 Worker 开始采集；MCP 待机不采集，也不启动平台。
+
+## 执行端监测
+
+Worker 默认每 5 秒读取标准 `/system_stats`、`/queue`，节点清单只在建立监测或显式 `probe_target` 时获取；网络请求有 2 秒时限、4 MiB 响应上限，失败逐步退避至 60 秒。HTTP 与 WebSocket 均不跟随重定向或使用系统代理。
+
+网页和 MCP 共享 `/api/status` 快照。每个指标包含来源、采集时间、15 秒过期时间、单位与可用性；缺值是 unknown，标准接口未提供的 GPU 利用率、温度、CPU、磁盘和完整日志是 unsupported，实际零值保留。WebSocket 只展示收到的真实节点事件；外部队列不冒充本项目任务，不计算整体百分比或 ETA，不因无事件判失败或补发生成。
+
+SQLite 格式 4 按配置修订、服务实例和 Worker PID 隔离最新样本，重启未采集时为 unknown；样本覆盖不创建配置修订或业务事件。能力预检 available 仅表明标准接口和节点清单可用，不表示已完成真实生成验收。标准 WebSocket 部分事件按 clientId 定向，其他客户端的全部进度未必可见。真实 ComfyUI 与 Linux 环境仍待实测。
 
 ## 检查与打包
 
@@ -128,7 +136,7 @@ make package
 | [架构设计](docs/architecture.md) | 项目目录、进程生命周期、模块契约、执行恢复与素材清理 |
 | [技术调研与分期](docs/research-and-roadmap.md) | 官方方案参考、简化画布设计、分期与仍需实测的问题 |
 
-范围以首版范围与验收为准。除上方明确列出的 M1/1.1–1.4 能力外，文档中的目录、工具名和接口仍是设计约定，不代表已经实现。
+范围以首版范围与验收为准。除上方明确列出的 M1/1.1–1.5 能力外，文档中的目录、工具名和接口仍是设计约定，不代表已经实现。
 
 ## 第一版
 

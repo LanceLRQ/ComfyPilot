@@ -12,6 +12,9 @@ from comfypilot.project import initialize_project, resolve_project_root
 from mcp import Client, StdioServerParameters
 
 TOOLS = {
+    "probe_target",
+    "get_target_status",
+    "get_monitor_status",
     "inspect_project",
     "init_project",
     "start_service",
