@@ -67,11 +67,19 @@ def resolve_project_root(value: Path) -> Path:
         ".comfypilot",
         ".comfypilot/project.json",
         ".comfypilot/state.sqlite",
+        ".comfypilot/state.sqlite-wal",
+        ".comfypilot/state.sqlite-shm",
+        ".comfypilot/runtime.json",
+        ".comfypilot/runtime.tmp",
         ".comfypilot/artifacts",
         ".comfypilot/runs",
         ".comfypilot/staging",
         ".comfypilot/logs",
         ".comfypilot/locks",
+        ".comfypilot/locks/control.lock",
+        ".comfypilot/locks/service.lock",
+        ".comfypilot/locks/worker.lock",
+        ".comfypilot/logs/service.log",
         "workflows",
         "custom_nodes",
         "modules",
@@ -121,10 +129,11 @@ def resolve_project_root(value: Path) -> Path:
 
 def migrate_database(project: Project) -> None:
     with closing(sqlite3.connect(project.database)) as db, db:
-        version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 1:
-            raise ProjectError("unsupported_schema", "数据库格式比当前程序更新，请使用对应版本。")
         db.execute("PRAGMA journal_mode=WAL")
+        db.execute("BEGIN IMMEDIATE")
+        version = db.execute("PRAGMA user_version").fetchone()[0]
+        if version > 2:
+            raise ProjectError("unsupported_schema", "数据库格式比当前程序更新，请使用对应版本。")
         db.execute(
             "CREATE TABLE IF NOT EXISTS project "
             "(project_id TEXT PRIMARY KEY, root TEXT NOT NULL, created_at TEXT NOT NULL)"
@@ -143,7 +152,39 @@ def migrate_database(project: Project) -> None:
             "INSERT OR IGNORE INTO project (project_id, root, created_at) VALUES (?, ?, ?)",
             (project_id, str(project.root), project.identity.created_at.isoformat()),
         )
-        db.execute("PRAGMA user_version=1")
+        if version < 2:
+            columns = {row[1] for row in db.execute("PRAGMA table_info(worker_status)")}
+            if "instance_id" not in columns:
+                db.execute(
+                    "ALTER TABLE worker_status ADD COLUMN instance_id TEXT NOT NULL DEFAULT ''"
+                )
+            db.execute(
+                "CREATE TABLE IF NOT EXISTS service_control "
+                "(singleton INTEGER PRIMARY KEY CHECK (singleton=1), "
+                "paused INTEGER NOT NULL CHECK (paused IN (0,1)), "
+                "reason TEXT NOT NULL, updated_at TEXT NOT NULL)"
+            )
+            db.execute(
+                "INSERT OR IGNORE INTO service_control VALUES (1, 1, 'initialization', ?)",
+                (datetime.now(UTC).isoformat(),),
+            )
+            db.execute("PRAGMA user_version=2")
+
+
+def read_dispatch(project: Project) -> dict[str, bool | str]:
+    with closing(sqlite3.connect(project.database)) as db:
+        row = db.execute(
+            "SELECT paused, reason, updated_at FROM service_control WHERE singleton=1"
+        ).fetchone()
+    return {"paused": bool(row[0]), "reason": row[1], "updated_at": row[2]}
+
+
+def set_dispatch(project: Project, *, paused: bool, reason: str) -> None:
+    with closing(sqlite3.connect(project.database)) as db, db:
+        db.execute(
+            "UPDATE service_control SET paused=?, reason=?, updated_at=? WHERE singleton=1",
+            (int(paused), reason, datetime.now(UTC).isoformat()),
+        )
 
 
 def load_project(root: Path) -> Project:

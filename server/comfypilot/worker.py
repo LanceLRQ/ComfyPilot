@@ -6,11 +6,13 @@ from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import Event
+from uuid import UUID
 
 from comfypilot.project import Project, load_project, resolve_project_root
+from comfypilot.runtime import project_lock
 
 
-def run_worker(project: Project) -> None:
+def run_worker(project: Project, instance_id: UUID) -> None:
     stopped = Event()
     for signum in (signal.SIGTERM, signal.SIGINT):
         signal.signal(signum, lambda *_: stopped.set())
@@ -20,26 +22,31 @@ def run_worker(project: Project) -> None:
             while not stopped.is_set():
                 with db:
                     db.execute(
-                        "INSERT INTO worker_status (project_id, pid, last_seen_at, status) "
-                        "VALUES (?, ?, ?, 'running') ON CONFLICT(project_id) DO UPDATE SET "
+                        "INSERT INTO worker_status "
+                        "(project_id, pid, last_seen_at, status, instance_id) "
+                        "VALUES (?, ?, ?, 'running', ?) ON CONFLICT(project_id) DO UPDATE SET "
                         "pid=excluded.pid, last_seen_at=excluded.last_seen_at, "
-                        "status=excluded.status",
-                        (project_id, os.getpid(), datetime.now(UTC).isoformat()),
+                        "status=excluded.status, instance_id=excluded.instance_id",
+                        (project_id, os.getpid(), datetime.now(UTC).isoformat(), str(instance_id)),
                     )
                 stopped.wait(5)
         finally:
             with db:
                 db.execute(
-                    "UPDATE worker_status SET status='stopped', last_seen_at=? WHERE project_id=?",
-                    (datetime.now(UTC).isoformat(), project_id),
+                    "UPDATE worker_status SET status='stopped', last_seen_at=? "
+                    "WHERE project_id=? AND instance_id=? AND pid=?",
+                    (datetime.now(UTC).isoformat(), project_id, str(instance_id), os.getpid()),
                 )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="ComfyPilot 独立 Worker")
     parser.add_argument("--project-root", required=True, type=Path)
+    parser.add_argument("--instance-id", required=True, type=UUID)
     args = parser.parse_args()
-    run_worker(load_project(resolve_project_root(args.project_root)))
+    project = load_project(resolve_project_root(args.project_root))
+    with project_lock(project, "worker", timeout=0):
+        run_worker(project, args.instance_id)
 
 
 if __name__ == "__main__":

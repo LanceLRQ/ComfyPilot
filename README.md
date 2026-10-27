@@ -4,7 +4,7 @@
 
 产品目标：用户在 Claude Code、Codex 等工具里提需求，Agent 按 Skill 在当前项目目录启动 ComfyPilot，通过 MCP 管理任务与执行。用户打开浏览器看进度、审片和提出修改意见。生成可以交给本机或远程 ComfyUI。
 
-当前已实现 M1/1.1：项目初始化、回环 API、独立 Worker 和项目概览页。MCP、Agent Skill、ComfyUI 连接及视频审片尚未接入。文档更新于 2026-10-27（Asia/Shanghai）。
+当前已实现 M1/1.1–1.2：项目初始化、回环 API、独立 Worker、项目概览页，以及后台启停、实例复用和进程身份校验。MCP、Agent Skill、ComfyUI 连接及视频审片尚未接入。文档更新于 2026-10-27（Asia/Shanghai）。
 
 ## 本地开发与运行
 
@@ -21,12 +21,29 @@ make web
 
 ```sh
 uv run --locked comfypilot init --project-root /absolute/path/to/project
-uv run --locked comfypilot serve --project-root /absolute/path/to/project
+uv run --locked comfypilot start --project-root /absolute/path/to/project
 ```
 
-打开 <http://127.0.0.1:8765> 查看当前项目的名称、目录、UUID、数据格式和 Worker 心跳。页面每 5 秒读取一次实际状态。服务在前台运行，按 Ctrl+C 停止 API 和 Worker；后台启停、实例复用和异常恢复属于后续 M1/1.2。
+打开 <http://127.0.0.1:8765> 查看当前项目的名称、目录、UUID、数据格式和 Worker 心跳。页面每 5 秒读取一次实际状态。`start` 返回 JSON 状态后退出，API 和 Worker 在各自独立的后台会话中继续运行；同项目重复或并发启动复用一个实例。
 
-CLI 必须显式传入绝对项目目录，不会猜测当前项目。`init` 可重复执行，保留已有项目标识、配置和数据；`serve` 只加载已经初始化的项目，不隐式创建项目。默认仅监听 `127.0.0.1`，无需登录；本阶段尚不支持局域网监听。
+```sh
+uv run --locked comfypilot status --project-root /absolute/path/to/project
+uv run --locked comfypilot stop --project-root /absolute/path/to/project
+```
+
+`status` 和 `stop` 不会隐式启动服务。复用和停止先核对项目、实例、进程启动信息和健康回执；端口或身份冲突时拒绝接管。后台日志位于项目的 `.comfypilot/logs/service.log`。开发调试仍可使用 `serve` 前台运行，按 Ctrl+C 退出；它与后台实例共用项目实例锁。
+
+Worker 单独退出后，仍运行的 API 会以 1 秒检查间隔恢复它；连续失败最多重试 3 次，稳定运行 5 秒后重置计数。显式停止时取消监督并收尾自己的 Worker，不启动或停止 ComfyUI。API 意外消失但 Worker 仍存活时，命令会保留现场并报告诊断，当前不提供无健康回执的残留进程接管。
+
+初始化、启动及停止默认保存手动派发暂停。下面的命令只解除这个手动开关：
+
+```sh
+uv run --locked comfypilot resume-dispatch --project-root /absolute/path/to/project
+```
+
+重启后仍须显式恢复派发；Worker 单独重启保留开关状态。实际生成调度、对账、收片、指示范围和次数限制尚未接入，后续调度器仍须检查全部门禁；解除开关本身不会触发生成。
+
+CLI 必须显式传入绝对项目目录，不会猜测当前项目。`init` 可重复执行，保留已有项目标识、配置和数据；其他命令只加载已经初始化的项目。默认仅监听 `127.0.0.1`，无需登录；本阶段尚不支持局域网监听。进程管理使用 POSIX 文件锁和会话机制，当前仅在 macOS 实测，Linux 实测安排在 M1/1.7，暂不支持 Windows。
 
 初始化产生的文件全部位于指定项目内：
 
@@ -35,10 +52,13 @@ CLI 必须显式传入绝对项目目录，不会猜测当前项目。`init` 可
 | `comfypilot.yaml` | 项目名称、回环地址和端口配置 |
 | `.comfypilot/project.json` | 稳定 UUID、创建时间和数据格式 |
 | `.comfypilot/state.sqlite` | SQLite/WAL 元数据与 Worker 心跳 |
+| `.comfypilot/runtime.json` | 本次实例标识、端口、API/Worker PID 与创建时间；不作为可移植备份 |
 | `.comfypilot/artifacts/`、`runs/`、`staging/`、`logs/`、`locks/` | 为后续产物、运行记录及进程管理准备的目录，均位于 `.comfypilot/` 内 |
 | `workflows/`、`custom_nodes/`、`modules/`、`skills/` | 为项目资源预留的目录，当前不附带工作流、节点或 Skill |
 
-修改 `comfypilot.yaml` 的 `name` 或 `server.port` 后重新启动生效；`serve --port 8766` 可临时覆盖端口，不改配置。多个项目同时运行时使用不同端口。当前数据库仅接受已识别的本机文件系统，拒绝 NFS/SMB 等网络存储及未知类型；初始化和启动要求至少 16 MiB 可用空间，这只是基础启动门槛。
+修改 `comfypilot.yaml` 的 `name` 或 `server.port` 后，先停止再启动生效；`start --port 8766` 或 `serve --port 8766` 可临时覆盖端口，不改配置。多个项目同时运行时使用不同端口。当前数据库仅接受已识别的本机文件系统，拒绝 NFS/SMB 等网络存储及未知类型；初始化和启动要求至少 16 MiB 可用空间，这只是基础启动门槛。
+
+已有格式 1 数据库会以短事务增量升级至格式 2，保留项目 UUID、Worker 记录与用户表，并增加实例归属及手动派发开关。项目配置与身份 JSON 的 `schema_version` 仍为 1，和 SQLite 的 `user_version` 分别管理。
 
 这些 CLI 命令用于当前开发阶段的验证。最终用户由 Agent 依据 Skill 管理项目服务，MCP 默认待机的产品约定保持不变。
 
@@ -49,7 +69,7 @@ make check
 make package
 ```
 
-`make check` 依次执行 Ruff 诊断与格式检查、Biome、TypeScript 类型检查、Web 构建和服务端测试。测试覆盖双项目隔离、重复初始化、存储拒绝、数据库迁移、真实 API/Worker 进程及静态资源访问边界。
+`make check` 依次执行 Ruff 诊断与格式检查、Biome、TypeScript 类型检查、Web 构建和服务端测试。测试覆盖双项目隔离、重复初始化、存储拒绝、数据库迁移、真实 API/Worker 进程、并发启动、身份冲突、有限恢复、持久暂停及静态资源访问边界。
 
 `make package` 先构建页面，再输出 `dist/comfypilot-0.1.0.dev0-py3-none-any.whl`。wheel 包含页面静态资源，安装运行时无需 Node.js；仍需 Python 及包声明的运行依赖。安装包已在脱离源码的独立虚拟环境中完成初始化、服务和页面冒烟验证。
 
@@ -62,7 +82,7 @@ make package
 | [架构设计](docs/architecture.md) | 项目目录、进程生命周期、模块契约、执行恢复与素材清理 |
 | [技术调研与分期](docs/research-and-roadmap.md) | 官方方案参考、简化画布设计、分期与仍需实测的问题 |
 
-范围以首版范围与验收为准。除上方明确列出的 M1/1.1 能力外，文档中的目录、工具名和接口仍是设计约定，不代表已经实现。
+范围以首版范围与验收为准。除上方明确列出的 M1/1.1–1.2 能力外，文档中的目录、工具名和接口仍是设计约定，不代表已经实现。
 
 ## 第一版
 

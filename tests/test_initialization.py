@@ -37,7 +37,7 @@ def test_initialization_keeps_two_projects_separate(tmp_path: Path) -> None:
             assert (root / directory).is_dir()
         with sqlite3.connect(root / ".comfypilot/state.sqlite") as db:
             assert db.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
-            assert db.execute("PRAGMA user_version").fetchone()[0] == 1
+            assert db.execute("PRAGMA user_version").fetchone()[0] == 2
             assert db.execute("SELECT project_id FROM project").fetchall() == [
                 (data["project_id"],)
             ]
@@ -89,3 +89,31 @@ def test_existing_configuration_is_never_overwritten(tmp_path: Path) -> None:
     assert json.loads(result.stderr)["code"] == "project_conflict"
     assert config.read_text() == "用户已有的配置\n"
     assert not (tmp_path / ".comfypilot").exists()
+
+
+def test_database_upgrade_preserves_legacy_worker_and_user_data(tmp_path: Path) -> None:
+    first = run_cli("init", "--project-root", str(tmp_path), home=tmp_path)
+    assert first.returncode == 0, first.stderr
+    project_id = json.loads(first.stdout)["project_id"]
+    with sqlite3.connect(tmp_path / ".comfypilot/state.sqlite") as db:
+        db.execute("DROP TABLE IF EXISTS service_control")
+        db.execute("DROP TABLE worker_status")
+        db.execute(
+            "CREATE TABLE worker_status (project_id TEXT PRIMARY KEY, pid INTEGER NOT NULL, "
+            "last_seen_at TEXT NOT NULL, status TEXT NOT NULL)"
+        )
+        db.execute(
+            "INSERT INTO worker_status VALUES (?, 123, '2026-10-27T00:00:00+00:00', 'stopped')",
+            (project_id,),
+        )
+        db.execute("CREATE TABLE user_marker (value TEXT)")
+        db.execute("INSERT INTO user_marker VALUES ('keep')")
+        db.execute("PRAGMA user_version=1")
+    for _ in range(2):
+        result = run_cli("init", "--project-root", str(tmp_path), home=tmp_path)
+        assert result.returncode == 0, result.stderr
+    with sqlite3.connect(tmp_path / ".comfypilot/state.sqlite") as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert db.execute("SELECT pid, instance_id FROM worker_status").fetchall() == [(123, "")]
+        assert db.execute("SELECT value FROM user_marker").fetchall() == [("keep",)]
+        assert db.execute("SELECT paused FROM service_control").fetchall() == [(1,)]
