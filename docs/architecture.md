@@ -449,3 +449,9 @@ SQLite 格式 4 的 `status_samples` 以目标和样本种类覆盖最新值，�
 用户范围固定配方/输入哈希、允许目标和参数候选值、最大次数及停止条件。仅显式生效才替换旧方案，替换/停止与旧 queued 运行的取消同事务；已有 intent 保留。业务命令先检查 command_id，再检查 expected_revision；状态、修订、事件和回执在同一短事务提交。数据库约束同方案/动作唯一和项目在途生成唯一。
 
 内部 `reserve_submission` 在写事务内复核当前限制、目标身份、能力、节点和外部空队列，保存 intent、client_id、最终图哈希与目标快照，同时预留一次额度并写事件；事件失败全部回滚。旧 intent 返回 reused，后续 M2 必须对账，不能重新发送。manual_pause、review_hold 与 reconciliation_required 独立保存，普通恢复只改手动暂停。当前不启动生成消费循环、不发送 POST /prompt，配方/输入文件校验与真实回执、对账由 M2 接续。
+
+### M1/1.7 Skill 交付边界
+
+产品 Skill 的源文件在 `packages/skills/comfypilot/`，构建时包含到 wheel 的 `comfypilot/skills/comfypilot/`。`comfypilot skill-path` 仅读取资源并返回目录，不要求项目、不创建连接。宿主按其发现约定安装完整 Skill 目录；平台业务配置仍全部属于创作项目。Skill 负责根目录选择、显式生命周期、目标/能力缺项、指示和恢复语义，不托管宿主模型或接管 MCP 进程，也不隐式安装/启停 ComfyUI。
+
+安装与兼容证据见 [Agent 接入与 M1 验收](agent-setup.md)。目前只有 macOS 的协议与进程层验证，没有完成实际双宿主和 Linux 验收；M1/1.7 保留未完成状态。

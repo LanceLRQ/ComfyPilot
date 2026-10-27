@@ -4,7 +4,7 @@
 
 产品目标：用户在 Claude Code、Codex 等工具里提需求，Agent 按 Skill 在当前项目目录启动 ComfyPilot，通过 MCP 管理任务与执行。用户打开浏览器看进度、审片和提出修改意见。生成可以交给本机或远程 ComfyUI。
 
-当前已实现 M1/1.1–1.6：项目服务、默认待机的 stdio MCP、显式连接，以及网页/MCP 共用的配置修订和多个执行端。已接入 ComfyUI 能力探测与基础状态快照；Agent Skill、生成与视频审片尚未接入。文档更新于 2026-10-27（Asia/Shanghai）。
+当前已实现 M1/1.1–1.6：项目服务、默认待机的 stdio MCP、显式连接，以及网页/MCP 共用的配置修订和多个执行端。已接入 ComfyUI 能力探测与基础状态快照；已交付 Agent Skill 与接入说明，M1/1.7 的实际双宿主/Linux 验收仍待补充；生成与视频审片尚未接入。文档更新于 2026-10-27（Asia/Shanghai）。
 
 ## 本地开发与运行
 
@@ -95,6 +95,10 @@ CLI 必须显式传入绝对项目目录，不会猜测当前项目。`init` 可
 
 配置工具还包括 `get_project`、`update_project`、`refresh_project`、`list_targets`、`update_target` 和 `resolve_target`，均要求显式项目与连接引用。写入传 `expected_revision`，配置冲突返回 `conflict`；网页保留当前草稿，可自行合并或明确重新读取。监测工具包括 `probe_target`、`get_target_status` 和 `get_monitor_status`。执行工具包括 `get_execution`、`create_task`、`create_plan`、`activate_plan`、`execute_plan`、`stop_plan`、`pause_dispatch` 和 `resume_dispatch`，当前共 24 个工具。实际生成提交、事件流与收片后续接入。
 
+## Agent Skill
+
+安装包包含 `comfypilot` Skill，运行 `comfypilot skill-path` 只读取得目录；将完整目录复制到所选宿主的项目 Skill 位置，再注册 stdio MCP。详细步骤、当前能力与待实测矩阵见 [Agent 接入与 M1 验收](docs/agent-setup.md)。安装/枚举后保持待机，用户要求使用平台时才由 Agent 初始化、显式启动和连接。
+
 ## 执行端与秘密文件
 
 设置页可以添加/停用本机或远程执行端，指定名称、HTTP(S) 地址和默认值。每个执行端有稳定 ID；本机/远程标签不代表已经探测能力。`resolve_target` 优先使用显式 `target_id`，否则使用已配置默认值；没有明确目标时返回 `needs_input`，不猜测或自动切换。结果携带配置修订与完整目标快照；修改地址不会重写历史配置，不能用新地址上的同名外部任务替代原目标。
@@ -141,6 +145,7 @@ make package
 
 | 文档 | 内容 |
 | --- | --- |
+| [Agent 接入与 M1 验收](docs/agent-setup.md) | Skill 安装、双宿主注册、实际操作与待实测矩阵 |
 | [产品需求](docs/product-requirements.md) | 已确认约束、协作流程、模块划分与产品规则 |
 | [首版范围与验收](docs/mvp-scope.md) | 第一版功能边界、40 条验收要求与开发顺序 |
 | [架构设计](docs/architecture.md) | 项目目录、进程生命周期、模块契约、执行恢复与素材清理 |

@@ -17,6 +17,18 @@ def run_cli(*args: str, home: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
+def test_skill_path_locates_delivery_without_creating_project_or_home_files(tmp_path: Path):
+    result = run_cli("skill-path", home=tmp_path)
+    assert result.returncode == 0, result.stderr
+    data = json.loads(result.stdout)
+    skill = Path(data["path"])
+    assert skill.is_absolute()
+    assert data["name"] == "comfypilot"
+    assert (skill / "SKILL.md").is_file()
+    assert (skill / "references/operations.md").is_file()
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_initialization_keeps_two_projects_separate(tmp_path: Path) -> None:
     home = tmp_path / "home"
     home.mkdir()

@@ -30,6 +30,9 @@ comfypilot-mcp = "comfypilot.mcp_bridge:main"
 [tool.hatch.build.targets.wheel]
 packages = ["server/comfypilot"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"packages/skills/comfypilot" = "comfypilot/skills/comfypilot"
+
 [tool.hatch.build]
 artifacts = ["server/comfypilot/web/**"]
 

@@ -2,9 +2,11 @@
 
 日期：2026-10-27（Asia/Shanghai）
 
-状态：首版设计范围；M1/1.1–1.6 已实现项目服务、待机 MCP、配置修订、多个执行端、基础监测、方案与串行门禁，完整首版验收尚未完成。任务级进度以 kanban-hub 为准。
+状态：首版设计范围；M1/1.1–1.6 已实现项目服务、待机 MCP、配置修订、多个执行端、基础监测、方案与串行门禁，M1/1.7 的 Skill 已交付，实际双宿主/Linux/ComfyUI 环境验收待补，完整首版验收尚未完成。任务级进度以 kanban-hub 为准。
 
 本文件规定第一版 P0。[产品需求](product-requirements.md)说明产品规则，[架构设计](architecture.md)规定技术契约，[技术调研与分期](research-and-roadmap.md)解释参考方案与后续方向。
+
+M1 当前证据与剩余实测见 [Agent 接入与 M1 验收](agent-setup.md)。Skill 随 wheel 交付，skill-path 仅读取资源；实际宿主操作和 Linux 未实测，不据此关闭 M1/1.7。
 
 ## 1. 交付形态
 
