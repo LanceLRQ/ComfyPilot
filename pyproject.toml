@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "comfypilot"
+version = "0.1.0.dev0"
+description = "与本地 AI Agent 一起操作 ComfyUI 的创作与审片工作台"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "uvicorn>=0.34,<1",
+  "pydantic>=2.10,<3",
+  "PyYAML>=6,<7",
+  "psutil>=7,<8",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
+
+[project.scripts]
+comfypilot = "comfypilot.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["server/comfypilot"]
+
+[tool.hatch.build]
+artifacts = ["server/comfypilot/web/**"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

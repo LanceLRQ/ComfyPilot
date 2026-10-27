@@ -11,7 +11,10 @@
 
 ## 完成标准
 
-尚未定义检查命令。项目有了之后写在这里。
+- 首次开发运行 `make setup` 安装锁定依赖。交付前必须运行并通过 `make check`，其中包含服务端 Ruff 诊断和格式检查、前端 Biome、TypeScript 类型检查、Web 构建和 pytest。
+- 服务端源码在 `server/comfypilot/`，测试在 `tests/`，前端源码在 `apps/web/src/`。Web 构建输出到 `server/comfypilot/web/`，属于被忽略的生成文件，不手工修改或提交。
+- 修改打包、启动入口或静态资源路径后，执行 `make package` 并在脱离源码的干净虚拟环境中安装 wheel，验证 CLI、API、Worker 与页面；不能只验证源码目录可运行。
+- 运行服务必须显式指定绝对 `--project-root`；测试使用独立临时项目，不把开发仓库或用户现有项目作为可随意修改的测试数据。
 
 ## 文档
 

@@ -5,3 +5,12 @@ docs/_internal/
 CLAUDE.local.md
 .claude/
 # <<< vibesop
+
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+node_modules/
+dist/
+server/comfypilot/web/
