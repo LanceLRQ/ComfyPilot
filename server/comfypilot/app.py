@@ -16,8 +16,9 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from comfypilot.project import Project, read_dispatch, set_dispatch
+from comfypilot.project import Project, read_dispatch, read_project, set_dispatch
 from comfypilot.runtime import RuntimeRecord, ServiceHealth, process_identity, write_runtime
+from comfypilot.settings_api import install_settings_routes
 
 
 class WorkerStatus(BaseModel):
@@ -105,6 +106,7 @@ def create_app(project: Project, runtime: RuntimeRecord) -> FastAPI:
                 write_runtime(project, runtime)
 
     app = FastAPI(title="ComfyPilot", docs_url=None, redoc_url=None, lifespan=lifespan)
+    install_settings_routes(app, project, runtime)
 
     def worker_status() -> WorkerStatus:
         with closing(sqlite3.connect(project.database)) as db:
@@ -137,7 +139,7 @@ def create_app(project: Project, runtime: RuntimeRecord) -> FastAPI:
     @app.get("/api/project")
     def overview() -> ProjectOverview:
         return ProjectOverview(
-            **project.summary(),
+            **read_project(project.root).summary(),
             worker=worker_status(),
             instance_id=runtime.instance_id,
             dispatch=read_dispatch(project),

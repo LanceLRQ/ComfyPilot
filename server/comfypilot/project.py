@@ -3,13 +3,15 @@ import sqlite3
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from hashlib import sha256
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit, urlunsplit
 from uuid import UUID, uuid4
 
 import psutil
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class ProjectError(Exception):
@@ -24,11 +26,56 @@ class ServerConfig(BaseModel):
     port: int = Field(default=8765, ge=1, le=65535)
 
 
+class ExecutionTarget(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    id: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
+    name: str = Field(min_length=1, max_length=200)
+    location: Literal["local", "remote"] = "remote"
+    base_url: str
+    enabled: bool = True
+    credential_ref: str | None = Field(default=None, pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
+
+    @field_validator("base_url")
+    @classmethod
+    def normalize_url(cls, value: str) -> str:
+        parsed = urlsplit(value)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+            or any(character.isspace() for character in value)
+        ):
+            raise ValueError("目标必须是无内嵌凭据、查询参数或片段的 HTTP(S) 地址")
+        host = parsed.hostname.lower()
+        if ":" in host:
+            host = f"[{host}]"
+        port = parsed.port
+        if port is not None and not (
+            parsed.scheme == "http" and port == 80 or parsed.scheme == "https" and port == 443
+        ):
+            host += f":{port}"
+        return urlunsplit((parsed.scheme, host, parsed.path.rstrip("/"), "", ""))
+
+
 class ProjectConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     schema_version: Literal[1] = 1
-    name: str
+    name: str = Field(min_length=1, max_length=200)
     server: ServerConfig = Field(default_factory=ServerConfig)
+    targets: list[ExecutionTarget] = Field(default_factory=list, max_length=32)
+    default_target_id: str | None = None
+
+    @model_validator(mode="after")
+    def check_targets(self):
+        ids = [target.id for target in self.targets]
+        if len(ids) != len(set(ids)) or (
+            self.default_target_id is not None and self.default_target_id not in ids
+        ):
+            raise ValueError("目标 ID 不得重复，默认目标必须已配置")
+        return self
 
 
 class ProjectIdentity(BaseModel):
@@ -64,6 +111,8 @@ def resolve_project_root(value: Path) -> Path:
     root = value.resolve()
     for name in [
         "comfypilot.yaml",
+        ".comfypilot/config.tmp",
+        ".comfypilot/secrets.local.yaml",
         ".comfypilot",
         ".comfypilot/project.json",
         ".comfypilot/state.sqlite",
@@ -77,6 +126,7 @@ def resolve_project_root(value: Path) -> Path:
         ".comfypilot/logs",
         ".comfypilot/locks",
         ".comfypilot/locks/control.lock",
+        ".comfypilot/locks/config.lock",
         ".comfypilot/locks/service.lock",
         ".comfypilot/locks/worker.lock",
         ".comfypilot/logs/service.log",
@@ -132,7 +182,7 @@ def migrate_database(project: Project) -> None:
         db.execute("PRAGMA journal_mode=WAL")
         db.execute("BEGIN IMMEDIATE")
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 2:
+        if version > 3:
             raise ProjectError("unsupported_schema", "数据库格式比当前程序更新，请使用对应版本。")
         db.execute(
             "CREATE TABLE IF NOT EXISTS project "
@@ -169,6 +219,21 @@ def migrate_database(project: Project) -> None:
                 (datetime.now(UTC).isoformat(),),
             )
             db.execute("PRAGMA user_version=2")
+        if version < 3:
+            db.execute(
+                "CREATE TABLE IF NOT EXISTS config_revisions "
+                "(revision INTEGER PRIMARY KEY, config TEXT NOT NULL, source_hash TEXT NOT NULL, "
+                "accepted_at TEXT NOT NULL)"
+            )
+            db.execute(
+                "INSERT OR IGNORE INTO config_revisions VALUES (1, ?, ?, ?)",
+                (
+                    project.config.model_dump_json(),
+                    sha256((project.root / "comfypilot.yaml").read_bytes()).hexdigest(),
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+            db.execute("PRAGMA user_version=3")
 
 
 def read_dispatch(project: Project) -> dict[str, bool | str]:
@@ -194,12 +259,24 @@ def read_project(root: Path) -> Project:
         for name in ["comfypilot.yaml", ".comfypilot/project.json", ".comfypilot/state.sqlite"]
     ):
         raise ProjectError("project_incomplete", "项目未初始化或文件不完整，请先初始化或检查备份。")
+    identity = ProjectIdentity.model_validate_json((state / "project.json").read_text("utf-8"))
+    with closing(sqlite3.connect((state / "state.sqlite").as_uri() + "?mode=ro", uri=True)) as db:
+        version = db.execute("PRAGMA user_version").fetchone()[0]
+        if version > 3:
+            raise ProjectError("unsupported_schema", "数据库格式比当前程序更新，请使用对应版本。")
+        if version >= 3:
+            row = db.execute(
+                "SELECT config FROM config_revisions ORDER BY revision DESC LIMIT 1"
+            ).fetchone()
+            config = ProjectConfig.model_validate_json(row[0])
+        else:
+            config = ProjectConfig.model_validate(
+                yaml.safe_load((root / "comfypilot.yaml").read_text("utf-8"))
+            )
     return Project(
         root=root,
-        identity=ProjectIdentity.model_validate_json((state / "project.json").read_text("utf-8")),
-        config=ProjectConfig.model_validate(
-            yaml.safe_load((root / "comfypilot.yaml").read_text("utf-8"))
-        ),
+        identity=identity,
+        config=config,
     )
 
 

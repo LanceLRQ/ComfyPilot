@@ -2,7 +2,7 @@
 
 日期：2026-10-27（Asia/Shanghai）
 
-状态：首版设计范围；M1/1.1–1.3 已实现项目服务、生命周期与待机 MCP，完整首版验收尚未完成。任务级进度以 kanban-hub 为准。
+状态：首版设计范围；M1/1.1–1.4 已实现项目服务、待机 MCP、配置修订与多个执行端，完整首版验收尚未完成。任务级进度以 kanban-hub 为准。
 
 本文件规定第一版 P0。[产品需求](product-requirements.md)说明产品规则，[架构设计](architecture.md)规定技术契约，[技术调研与分期](research-and-roadmap.md)解释参考方案与后续方向。
 

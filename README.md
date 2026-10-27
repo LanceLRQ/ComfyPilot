@@ -4,7 +4,7 @@
 
 产品目标：用户在 Claude Code、Codex 等工具里提需求，Agent 按 Skill 在当前项目目录启动 ComfyPilot，通过 MCP 管理任务与执行。用户打开浏览器看进度、审片和提出修改意见。生成可以交给本机或远程 ComfyUI。
 
-当前已实现 M1/1.1–1.3：项目初始化、回环 API、独立 Worker、项目概览页、后台启停，以及默认待机的 stdio MCP 和显式项目连接。Agent Skill、ComfyUI 连接及视频审片尚未接入。文档更新于 2026-10-27（Asia/Shanghai）。
+当前已实现 M1/1.1–1.4：项目服务、默认待机的 stdio MCP、显式连接，以及网页/MCP 共用的配置修订和多个执行端。Agent Skill、ComfyUI 探测及视频审片尚未接入。文档更新于 2026-10-27（Asia/Shanghai）。
 
 ## 本地开发与运行
 
@@ -56,9 +56,9 @@ CLI 必须显式传入绝对项目目录，不会猜测当前项目。`init` 可
 | `.comfypilot/artifacts/`、`runs/`、`staging/`、`logs/`、`locks/` | 为后续产物、运行记录及进程管理准备的目录，均位于 `.comfypilot/` 内 |
 | `workflows/`、`custom_nodes/`、`modules/`、`skills/` | 为项目资源预留的目录，当前不附带工作流、节点或 Skill |
 
-修改 `comfypilot.yaml` 的 `name` 或 `server.port` 后，先停止再启动生效；`start --port 8766` 或 `serve --port 8766` 可临时覆盖端口，不改配置。多个项目同时运行时使用不同端口。当前数据库仅接受已识别的本机文件系统，拒绝 NFS/SMB 等网络存储及未知类型；初始化和启动要求至少 16 MiB 可用空间，这只是基础启动门槛。
+项目设置页与 MCP 显式更新配置后产生新修订。直接修改 `comfypilot.yaml` 属于磁盘草稿，须使用设置页“接纳文件修改”或 MCP `refresh_project` 后生效；非法草稿保留原有效配置。服务端口的修改须停止再启动，`start --port 8766` 或 `serve --port 8766` 也可临时覆盖端口。多个项目使用不同端口。数据库仅接受已识别的本机文件系统；初始化和启动要求至少 16 MiB 可用空间。
 
-已有格式 1 数据库会以短事务增量升级至格式 2，保留项目 UUID、Worker 记录与用户表，并增加实例归属及手动派发开关。项目配置与身份 JSON 的 `schema_version` 仍为 1，和 SQLite 的 `user_version` 分别管理。
+已有数据库增量升级至格式 3，保留项目 UUID、Worker 记录与用户表，增加实例归属、手动派发开关和不可变配置修订。旧项目首次升级时将原 YAML 接纳为修订 1，之后不自动读取文件修改。项目配置与身份 JSON 的 `schema_version` 仍为 1，和 SQLite 的 `user_version` 分别管理。
 
 这些 CLI 命令也用于开发验证。最终用户由 Agent 依据 Skill 管理项目服务；完整 Skill 与 Claude Code/Codex 双宿主实测在 M1/1.7 接入。
 
@@ -91,7 +91,22 @@ CLI 必须显式传入绝对项目目录，不会猜测当前项目。`init` 可
 
 工具返回结构化 `{ "ok": true, "data": { ... } }`；失败返回 `{ "ok": false, "error": { "code": "...", "message": "下一步提示" } }`，并设置 MCP `isError`。未连接返回 `service_not_connected`；引用属于其他目录或 UUID 不符返回 `project_mismatch`；重启或进程身份变化后返回 `connection_invalidated`，需要重新显式连接。旧引用不会自动切换到新实例。
 
-连接引用只存在于当前 MCP 进程中，允许同时连接多个项目。同项目的多个 MCP 进程复用平台实例，各自管理引用；退出宿主、终止 MCP 或断开连接后，后台 API/Worker 继续运行。本阶段只提供上述 7 个工具，生成任务、事件等待和工作状态调整会按后续里程碑接入。
+连接引用只存在于当前 MCP 进程中，允许同时连接多个项目。同项目的多个 MCP 进程复用平台实例，各自管理引用；退出宿主、终止 MCP 或断开连接后，后台 API/Worker 继续运行。
+
+配置工具还包括 `get_project`、`update_project`、`refresh_project`、`list_targets`、`update_target` 和 `resolve_target`，均要求显式项目与连接引用。写入传 `expected_revision`，配置冲突返回 `conflict`；网页保留当前草稿，可自行合并或明确重新读取。当前共 13 个工具，生成、事件和工作状态调整后续接入。
+
+## 执行端与秘密文件
+
+设置页可以添加/停用本机或远程执行端，指定名称、HTTP(S) 地址和默认值。每个执行端有稳定 ID；本机/远程标签不代表已经探测能力。`resolve_target` 优先使用显式 `target_id`，否则使用已配置默认值；没有明确目标时返回 `needs_input`，不猜测或自动切换。结果携带配置修订与完整目标快照；修改地址不会重写历史配置，不能用新地址上的同名外部任务替代原目标。
+
+URL 不允许内嵌用户名、密码、查询参数或片段。可选认证仅填 `credential_ref`，让 Agent 在项目 `.comfypilot/secrets.local.yaml` 中管理对应请求头：
+
+```yaml
+render-auth:
+  Authorization: Bearer <由用户在本地填写>
+```
+
+支持 `Authorization` 或 `X-API-Key`；公开配置和响应只显示引用及是否已配置。秘密文件应限制为本人可读并加入项目忽略规则；不要把凭据粘贴到普通配置或工作流。重复地址会给出合并提示，平台不会自动合并目标身份。当前只完成配置与路由，不因添加目标主动发起探测。
 
 ## 检查与打包
 
@@ -113,7 +128,7 @@ make package
 | [架构设计](docs/architecture.md) | 项目目录、进程生命周期、模块契约、执行恢复与素材清理 |
 | [技术调研与分期](docs/research-and-roadmap.md) | 官方方案参考、简化画布设计、分期与仍需实测的问题 |
 
-范围以首版范围与验收为准。除上方明确列出的 M1/1.1–1.3 能力外，文档中的目录、工具名和接口仍是设计约定，不代表已经实现。
+范围以首版范围与验收为准。除上方明确列出的 M1/1.1–1.4 能力外，文档中的目录、工具名和接口仍是设计约定，不代表已经实现。
 
 ## 第一版
 

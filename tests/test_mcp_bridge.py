@@ -19,6 +19,12 @@ TOOLS = {
     "disconnect_service",
     "stop_service",
     "get_project_status",
+    "get_project",
+    "update_project",
+    "refresh_project",
+    "list_targets",
+    "update_target",
+    "resolve_target",
 }
 
 # 审计在桥接进程内安装，避免把独立 API/Worker 自己的心跳误算为 MCP 写入。

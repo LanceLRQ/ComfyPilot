@@ -3,7 +3,7 @@ import json
 import sqlite3
 from http.client import HTTPConnection, HTTPException
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import yaml
 from mcp.server import Server
@@ -21,6 +21,7 @@ from comfypilot.project import (
     resolve_project_root,
 )
 from comfypilot.runtime import RuntimeRecord, read_runtime, require_instance
+from comfypilot.settings_api import ConfigRequest, RevisionRequest, RouteRequest, TargetRequest
 
 
 class ProjectArguments(BaseModel):
@@ -42,6 +43,22 @@ class DisconnectArguments(ConnectionArguments):
     connection_ref: str = Field(min_length=1, description="需要断开的本进程连接引用。")
 
 
+class ConfigArguments(ConnectionArguments, ConfigRequest):
+    pass
+
+
+class RefreshArguments(ConnectionArguments, RevisionRequest):
+    pass
+
+
+class TargetArguments(ConnectionArguments, TargetRequest):
+    pass
+
+
+class RouteArguments(ConnectionArguments, RouteRequest):
+    pass
+
+
 class ToolError(BaseModel):
     code: str
     message: str
@@ -51,6 +68,23 @@ class ToolResponse(BaseModel):
     ok: bool
     data: dict | None = None
     error: ToolError | None = None
+
+
+class ApplicationReply(BaseModel):
+    project_id: UUID
+    instance_id: UUID
+    data: dict | None = None
+    error: ToolError | None = None
+
+
+PROJECT_API = {
+    "get_project": ("GET", "/api/config"),
+    "update_project": ("POST", "/api/config/update"),
+    "refresh_project": ("POST", "/api/config/refresh"),
+    "list_targets": ("GET", "/api/targets"),
+    "update_target": ("POST", "/api/targets/update"),
+    "resolve_target": ("POST", "/api/targets/resolve"),
+}
 
 
 # 仅定义静态协议元数据；不得在此探测项目、服务或 ComfyUI。
@@ -96,6 +130,42 @@ TOOL_DEFINITIONS = {
         ConnectionArguments,
         "读取已连接项目的实际 API/Worker 与概览状态；"
         "必须先 connect_service 并传入 connection_ref。",
+        True,
+        True,
+    ),
+    "get_project": (
+        ConnectionArguments,
+        "读取已接受的项目配置修订与磁盘草稿状态，不显示凭据值。",
+        True,
+        True,
+    ),
+    "update_project": (
+        ConfigArguments,
+        "以 expected_revision 更新整个项目配置；冲突时保留草稿。",
+        False,
+        False,
+    ),
+    "refresh_project": (
+        RefreshArguments,
+        "显式验证并接纳磁盘 YAML；非法内容不替换有效修订。",
+        False,
+        False,
+    ),
+    "list_targets": (
+        ConnectionArguments,
+        "读取当前项目配置中的本机/远程执行端与默认目标。",
+        True,
+        True,
+    ),
+    "update_target": (
+        TargetArguments,
+        "以 expected_revision 新增或修改具名执行端，不改写历史快照。",
+        False,
+        False,
+    ),
+    "resolve_target": (
+        RouteArguments,
+        "只解析明确目标或配置默认值，缺项返回询问项；不探测、不隐式切换。",
         True,
         True,
     ),
@@ -160,10 +230,59 @@ class ProjectBridge:
                 "instance_id": str(health.runtime.instance_id),
                 "url": f"http://127.0.0.1:{runtime.port}",
             }
+        if name in PROJECT_API:
+            method, path = PROJECT_API[name]
+            return self.request(
+                project,
+                runtime,
+                method,
+                path,
+                arguments.model_dump(
+                    mode="json",
+                    exclude={"project_root", "connection_ref"},
+                ),
+            )
         return {
             "service": health.model_dump(mode="json"),
             "project": self.overview(project, runtime),
         }
+
+    def request(
+        self, project: Project, runtime: RuntimeRecord, method: str, path: str, data: dict
+    ) -> dict:
+        connection = HTTPConnection("127.0.0.1", runtime.port, timeout=3)
+        try:
+            connection.request(
+                method,
+                path,
+                body=json.dumps(data) if method == "POST" else None,
+                headers={
+                    "Content-Type": "application/json",
+                    "X-ComfyPilot-Instance": str(runtime.instance_id),
+                },
+            )
+            response = connection.getresponse()
+            result = ApplicationReply.model_validate_json(response.read(1048576))
+        except (OSError, HTTPException) as error:
+            raise ProjectError(
+                "service_unavailable", "无法访问项目 API，请检查服务并重新连接。"
+            ) from error
+        except ValidationError as error:
+            raise ProjectError(
+                "identity_mismatch", "项目 API 响应不符合预期，拒绝使用。"
+            ) from error
+        finally:
+            connection.close()
+        if (
+            result.project_id != project.identity.project_id
+            or result.instance_id != runtime.instance_id
+        ):
+            raise ProjectError("identity_mismatch", "项目 API 响应来自其他项目或实例。")
+        if result.error:
+            raise ProjectError(result.error.code, result.error.message)
+        if response.status != 200 or result.data is None:
+            raise ProjectError("service_unavailable", "项目 API 未返回成功结果，请检查服务。")
+        return result.data
 
     def overview(self, project: Project, runtime: RuntimeRecord) -> dict:
         from comfypilot.app import ProjectOverview

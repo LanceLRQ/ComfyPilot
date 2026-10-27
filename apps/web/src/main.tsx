@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { z } from "zod";
+import { Settings } from "./Settings";
 import "./style.css";
 
 const projectSchema = z.object({
@@ -172,12 +173,11 @@ function App() {
               <br />
               <em>确定的位置。</em>
             </h2>
-            <p>
-              这里已具备项目初始化与基础进程状态。ComfyUI 执行端、视频生成和审片将在后续阶段接入。
-            </p>
+            <p>已支持项目配置与多个执行端。生成、监测与审片将在后续阶段接入。</p>
             <span className="stage">当前阶段：项目与连接</span>
           </article>
         </section>
+        <Settings />
         <footer>
           <span>仅本机访问 · 所有项目数据保存在当前目录</span>
           <span>{updatedAt ? `更新于 ${updatedAt} · 每 5 秒刷新` : "正在读取…"}</span>

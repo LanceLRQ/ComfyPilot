@@ -37,7 +37,7 @@ def test_initialization_keeps_two_projects_separate(tmp_path: Path) -> None:
             assert (root / directory).is_dir()
         with sqlite3.connect(root / ".comfypilot/state.sqlite") as db:
             assert db.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
-            assert db.execute("PRAGMA user_version").fetchone()[0] == 2
+            assert db.execute("PRAGMA user_version").fetchone()[0] == 3
             assert db.execute("SELECT project_id FROM project").fetchall() == [
                 (data["project_id"],)
             ]
@@ -59,7 +59,7 @@ def test_reinitialization_preserves_identity_configuration_and_database(tmp_path
     second = run_cli("init", "--project-root", str(root), home=tmp_path)
     assert second.returncode == 0, second.stderr
     assert json.loads(first.stdout)["project_id"] == json.loads(second.stdout)["project_id"]
-    assert json.loads(second.stdout)["name"] == "用户的项目"
+    assert json.loads(second.stdout)["name"] == root.name
     assert config.read_bytes() == original_config
     assert (root / ".comfypilot/project.json").read_bytes() == original_metadata
     with sqlite3.connect(root / ".comfypilot/state.sqlite") as db:
@@ -113,7 +113,7 @@ def test_database_upgrade_preserves_legacy_worker_and_user_data(tmp_path: Path) 
         result = run_cli("init", "--project-root", str(tmp_path), home=tmp_path)
         assert result.returncode == 0, result.stderr
     with sqlite3.connect(tmp_path / ".comfypilot/state.sqlite") as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 3
         assert db.execute("SELECT pid, instance_id FROM worker_status").fetchall() == [(123, "")]
         assert db.execute("SELECT value FROM user_marker").fetchall() == [("keep",)]
         assert db.execute("SELECT paused FROM service_control").fetchall() == [(1,)]
