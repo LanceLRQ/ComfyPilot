@@ -182,7 +182,7 @@ def migrate_database(project: Project) -> None:
         db.execute("PRAGMA journal_mode=WAL")
         db.execute("BEGIN IMMEDIATE")
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 4:
+        if version > 5:
             raise ProjectError("unsupported_schema", "数据库格式比当前程序更新，请使用对应版本。")
         db.execute(
             "CREATE TABLE IF NOT EXISTS project "
@@ -242,14 +242,33 @@ def migrate_database(project: Project) -> None:
                 "PRIMARY KEY(target_id, kind))"
             )
             db.execute("PRAGMA user_version=4")
+        if version < 5:
+            from comfypilot.execution import initialize_execution_schema
+
+            initialize_execution_schema(db)
+            db.execute("PRAGMA user_version=5")
 
 
 def read_dispatch(project: Project) -> dict[str, bool | str]:
     with closing(sqlite3.connect(project.database)) as db:
-        row = db.execute(
-            "SELECT paused, reason, updated_at FROM service_control WHERE singleton=1"
-        ).fetchone()
-    return {"paused": bool(row[0]), "reason": row[1], "updated_at": row[2]}
+        return dispatch_state(db)
+
+
+def dispatch_state(db: sqlite3.Connection) -> dict[str, bool | str]:
+    row = db.execute(
+        "SELECT paused, reason, updated_at FROM service_control WHERE singleton=1"
+    ).fetchone()
+    holds = db.execute(
+        "SELECT review_hold,reconciliation_required FROM execution_control"
+    ).fetchone()
+    return {
+        "paused": bool(row[0]) or any(holds),
+        "manual_pause": bool(row[0]),
+        "review_hold": bool(holds[0]),
+        "reconciliation_required": bool(holds[1]),
+        "reason": row[1],
+        "updated_at": row[2],
+    }
 
 
 def set_dispatch(project: Project, *, paused: bool, reason: str) -> None:
@@ -270,7 +289,7 @@ def read_project(root: Path) -> Project:
     identity = ProjectIdentity.model_validate_json((state / "project.json").read_text("utf-8"))
     with closing(sqlite3.connect((state / "state.sqlite").as_uri() + "?mode=ro", uri=True)) as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 4:
+        if version > 5:
             raise ProjectError("unsupported_schema", "数据库格式比当前程序更新，请使用对应版本。")
         if version >= 3:
             row = db.execute(

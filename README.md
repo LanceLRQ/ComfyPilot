@@ -4,7 +4,7 @@
 
 产品目标：用户在 Claude Code、Codex 等工具里提需求，Agent 按 Skill 在当前项目目录启动 ComfyPilot，通过 MCP 管理任务与执行。用户打开浏览器看进度、审片和提出修改意见。生成可以交给本机或远程 ComfyUI。
 
-当前已实现 M1/1.1–1.5：项目服务、默认待机的 stdio MCP、显式连接，以及网页/MCP 共用的配置修订和多个执行端。已接入 ComfyUI 能力探测与基础状态快照；Agent Skill、生成与视频审片尚未接入。文档更新于 2026-10-27（Asia/Shanghai）。
+当前已实现 M1/1.1–1.6：项目服务、默认待机的 stdio MCP、显式连接，以及网页/MCP 共用的配置修订和多个执行端。已接入 ComfyUI 能力探测与基础状态快照；Agent Skill、生成与视频审片尚未接入。文档更新于 2026-10-27（Asia/Shanghai）。
 
 ## 本地开发与运行
 
@@ -41,7 +41,7 @@ Worker 单独退出后，仍运行的 API 会以 1 秒检查间隔恢复它；�
 uv run --locked comfypilot resume-dispatch --project-root /absolute/path/to/project
 ```
 
-重启后仍须显式恢复派发；Worker 单独重启保留开关状态。实际生成调度、对账、收片、指示范围和次数限制尚未接入，后续调度器仍须检查全部门禁；解除开关本身不会触发生成。
+重启后仍须显式恢复派发；Worker 单独重启保留开关状态。指示范围、次数限制与串行门禁已实现；实际生成派发、对账和收片尚未接入，解除开关本身不会触发生成。
 
 CLI 必须显式传入绝对项目目录，不会猜测当前项目。`init` 可重复执行，保留已有项目标识、配置和数据；其他命令只加载已经初始化的项目。默认仅监听 `127.0.0.1`，无需登录；本阶段尚不支持局域网监听。进程管理使用 POSIX 文件锁和会话机制，当前仅在 macOS 实测，Linux 实测安排在 M1/1.7，暂不支持 Windows。
 
@@ -93,7 +93,7 @@ CLI 必须显式传入绝对项目目录，不会猜测当前项目。`init` 可
 
 连接引用只存在于当前 MCP 进程中，允许同时连接多个项目。同项目的多个 MCP 进程复用平台实例，各自管理引用；退出宿主、终止 MCP 或断开连接后，后台 API/Worker 继续运行。
 
-配置工具还包括 `get_project`、`update_project`、`refresh_project`、`list_targets`、`update_target` 和 `resolve_target`，均要求显式项目与连接引用。写入传 `expected_revision`，配置冲突返回 `conflict`；网页保留当前草稿，可自行合并或明确重新读取。监测工具包括 `probe_target`、`get_target_status` 和 `get_monitor_status`。当前共 16 个工具，生成、业务事件和工作状态调整后续接入。
+配置工具还包括 `get_project`、`update_project`、`refresh_project`、`list_targets`、`update_target` 和 `resolve_target`，均要求显式项目与连接引用。写入传 `expected_revision`，配置冲突返回 `conflict`；网页保留当前草稿，可自行合并或明确重新读取。监测工具包括 `probe_target`、`get_target_status` 和 `get_monitor_status`。执行工具包括 `get_execution`、`create_task`、`create_plan`、`activate_plan`、`execute_plan`、`stop_plan`、`pause_dispatch` 和 `resume_dispatch`，当前共 24 个工具。实际生成提交、事件流与收片后续接入。
 
 ## 执行端与秘密文件
 
@@ -114,7 +114,17 @@ Worker 默认每 5 秒读取标准 `/system_stats`、`/queue`，节点清单只�
 
 网页和 MCP 共享 `/api/status` 快照。每个指标包含来源、采集时间、15 秒过期时间、单位与可用性；缺值是 unknown，标准接口未提供的 GPU 利用率、温度、CPU、磁盘和完整日志是 unsupported，实际零值保留。WebSocket 只展示收到的真实节点事件；外部队列不冒充本项目任务，不计算整体百分比或 ETA，不因无事件判失败或补发生成。
 
-SQLite 格式 4 按配置修订、服务实例和 Worker PID 隔离最新样本，重启未采集时为 unknown；样本覆盖不创建配置修订或业务事件。能力预检 available 仅表明标准接口和节点清单可用，不表示已完成真实生成验收。标准 WebSocket 部分事件按 clientId 定向，其他客户端的全部进度未必可见。真实 ComfyUI 与 Linux 环境仍待实测。
+格式 4 引入的监测表按配置修订、服务实例和 Worker PID 隔离最新样本，重启未采集时为 unknown；样本覆盖不创建配置修订或业务事件。能力预检 available 仅表明标准接口和节点清单可用，不表示已完成真实生成验收。标准 WebSocket 部分事件按 clientId 定向，其他客户端的全部进度未必可见。真实 ComfyUI 与 Linux 环境仍待实测。
+
+## 方案与执行范围
+
+`create_task` 记录用户目标和验收要求，`create_plan` 保存不可变草稿及执行指示：来源、允许的配方/输入内容哈希、目标、参数候选值、最多提交次数与停止条件。当前参数范围使用明确候选值枚举，尚不支持范围表达式；`on_failure` 表示失败后停止，额度上限始终生效。缺少指示或步骤越界会被拒绝。
+
+`activate_plan` 显式生效；它与旧方案未提交运行的取消处在同一事务，草稿本身不替换当前方案。`execute_plan` 按 action_index 幂等入队，同方案/动作仅一个 Run。停止不修改已有提交意图、不调用外部中断。所有业务命令传 UUID `command_id` 和 `get_execution` 的业务 `expected_revision`；这与配置修订是两个独立计数。重复命令返回原回执，新命令遇到旧修订返回 conflict；同 ID 改请求返回 command_mismatch。回执含命令 ID、结果、业务修订和持久事件 ID。
+
+SQLite 格式 5 保存任务、方案、Run、回执、事件与独立挂起原因。内部领取边界重新检查方案/指示、目标快照、最新能力与所需节点、外部空队列、所有暂停原因和项目总并发 1；额度预留、提交意图与事件同事务。旧意图仅返回 reused，不成为再次发送的许可。普通恢复只解除 manual_pause，保留 review_hold 与 reconciliation_required。CLI 恢复派发也记录命令回执。
+
+当前 Worker 只执行监测，队列不会自动发往 ComfyUI；配方/输入哈希目前由 Agent 提供，实际资源校验、生成提交、回执对账和收片在 M2 交付。不要把 queued 当作已经开始渲染，也不要绕过平台直接 POST /prompt。
 
 ## 检查与打包
 
@@ -136,7 +146,7 @@ make package
 | [架构设计](docs/architecture.md) | 项目目录、进程生命周期、模块契约、执行恢复与素材清理 |
 | [技术调研与分期](docs/research-and-roadmap.md) | 官方方案参考、简化画布设计、分期与仍需实测的问题 |
 
-范围以首版范围与验收为准。除上方明确列出的 M1/1.1–1.5 能力外，文档中的目录、工具名和接口仍是设计约定，不代表已经实现。
+范围以首版范围与验收为准。除上方明确列出的 M1/1.1–1.6 能力外，文档中的目录、工具名和接口仍是设计约定，不代表已经实现。
 
 ## 第一版
 

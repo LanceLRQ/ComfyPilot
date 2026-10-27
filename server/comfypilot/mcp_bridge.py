@@ -11,6 +11,15 @@ from mcp.server.stdio import stdio_server
 from mcp.types import CallToolResult, ListToolsResult, TextContent, Tool, ToolAnnotations
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from comfypilot.execution import (
+    ActivatePlan,
+    CreatePlan,
+    CreateTask,
+    ExecutePlan,
+    PauseDispatch,
+    ResumeDispatch,
+    StopPlan,
+)
 from comfypilot.lifecycle import inspect_service, start_service, stop_service
 from comfypilot.project import (
     Project,
@@ -69,6 +78,34 @@ class TargetStatusArguments(ConnectionArguments, TargetStatusRequest):
     pass
 
 
+class CreateTaskArguments(ConnectionArguments, CreateTask):
+    pass
+
+
+class CreatePlanArguments(ConnectionArguments, CreatePlan):
+    pass
+
+
+class ActivatePlanArguments(ConnectionArguments, ActivatePlan):
+    pass
+
+
+class ExecutePlanArguments(ConnectionArguments, ExecutePlan):
+    pass
+
+
+class StopPlanArguments(ConnectionArguments, StopPlan):
+    pass
+
+
+class PauseArguments(ConnectionArguments, PauseDispatch):
+    pass
+
+
+class ResumeArguments(ConnectionArguments, ResumeDispatch):
+    pass
+
+
 class ToolError(BaseModel):
     code: str
     message: str
@@ -88,6 +125,19 @@ class ApplicationReply(BaseModel):
 
 
 PROJECT_API = {
+    **{
+        name: ("POST", "/api/execution/command")
+        for name in (
+            "create_task",
+            "create_plan",
+            "activate_plan",
+            "execute_plan",
+            "stop_plan",
+            "pause_dispatch",
+            "resume_dispatch",
+        )
+    },
+    "get_execution": ("GET", "/api/execution"),
     "get_project": ("GET", "/api/config"),
     "update_project": ("POST", "/api/config/update"),
     "refresh_project": ("POST", "/api/config/refresh"),
@@ -102,6 +152,44 @@ PROJECT_API = {
 
 # 仅定义静态协议元数据；不得在此探测项目、服务或 ComfyUI。
 TOOL_DEFINITIONS = {
+    "get_execution": (ConnectionArguments, "读取业务修订、方案、运行与独立派发限制。", True, True),
+    "create_task": (
+        CreateTaskArguments,
+        "记录用户目标与验收要求；命令幂等并检查业务修订。",
+        False,
+        False,
+    ),
+    "create_plan": (
+        CreatePlanArguments,
+        "保存含用户执行范围的不可变方案草稿，不替换生效方案。",
+        False,
+        False,
+    ),
+    "activate_plan": (
+        ActivatePlanArguments,
+        "显式生效草稿，同事务取消旧方案未提交步骤。",
+        False,
+        False,
+    ),
+    "execute_plan": (
+        ExecutePlanArguments,
+        "在用户范围内幂等入队；当前阶段仅排队，尚不提交生成。",
+        False,
+        False,
+    ),
+    "stop_plan": (
+        StopPlanArguments,
+        "停止方案后续未提交步骤，保留在途记录，不中断外部队列。",
+        False,
+        False,
+    ),
+    "pause_dispatch": (PauseArguments, "保存手动派发暂停，不停止监测与在途工作。", False, False),
+    "resume_dispatch": (
+        ResumeArguments,
+        "仅解除手动派发暂停，不清除审片挂起或待核对限制。",
+        False,
+        False,
+    ),
     "probe_target": (
         TargetStatusArguments,
         "显式探测指定执行端的标准接口与节点清单，不提交任务。",

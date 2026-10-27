@@ -212,5 +212,13 @@ def resume_dispatch(project: Project) -> dict:
         status = status_service(project)
         if status["status"] != "running" or not status["worker_ready"]:
             raise ProjectError("service_not_running", "请先显式启动并确认 Worker 就绪。")
-        set_dispatch(project, paused=False, reason="explicit_resume")
-        return {**status, "dispatch": read_dispatch(project)}
+        from comfypilot.execution import ResumeDispatch, apply_command, get_execution
+
+        receipt = apply_command(
+            project,
+            ResumeDispatch(
+                command_id=str(uuid4()),
+                expected_revision=get_execution(project)["revision"],
+            ),
+        )
+        return {**status, "dispatch": read_dispatch(project), "receipt": receipt}

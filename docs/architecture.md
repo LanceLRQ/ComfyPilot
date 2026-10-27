@@ -2,7 +2,7 @@
 
 日期：2026-10-27（Asia/Shanghai）
 
-状态：整体设计约定；M1/1.1–1.5 已实现，其他部分按后续里程碑交付。需求见[产品需求](product-requirements.md)，发布边界见[首版范围与验收](mvp-scope.md)，选型依据见[技术调研与分期](research-and-roadmap.md)。
+状态：整体设计约定；M1/1.1–1.6 已实现，其他部分按后续里程碑交付。需求见[产品需求](product-requirements.md)，发布边界见[首版范围与验收](mvp-scope.md)，选型依据见[技术调研与分期](research-and-roadmap.md)。
 
 ## 1. 架构结论
 
@@ -364,7 +364,7 @@ Agent 可 read_events 或有上限的 wait_for_events，默认关注任务终态
 
 ## 11. MCP 与应用接口
 
-M1/1.1–1.5 已实现六个生命周期工具、`get_project_status`、六个配置/目标工具和三个监测工具，参数和错误见 [README](../README.md#stdio-mcp)。下表列出首版完整的拟定语义，未在 README 列出的工具尚未实现。业务接口始终限定当前项目，CLI、MCP 和 Web 调用共享 application 用例。
+M1/1.1–1.6 已实现六个生命周期工具、`get_project_status`、六个配置/目标工具、三个监测工具及八个执行工具，参数和错误见 [README](../README.md#stdio-mcp)。下表列出首版完整的拟定语义，未在 README 列出的工具尚未实现。业务接口始终限定当前项目，CLI、MCP 和 Web 调用共享 application 用例。
 
 | 操作组 | 拟定工具 | 约束 |
 | --- | --- | --- |
@@ -441,3 +441,11 @@ get_context 返回目标/验收标准、当前指示与次数、有效方案、�
 SQLite 格式 4 的 `status_samples` 以目标和样本种类覆盖最新值，查询同时核对配置修订、服务实例和当前 Worker PID。HTTP、能力清单和 WebSocket 事件分开保存；显式探测不会覆盖最近事件。采集任务与 Worker 心跳并行运行，网络等待不阻断心跳。监测协程异常由 Worker 退出和已有有限重启机制处理，避免心跳存活但采集静默停止。
 
 标准接口按 5 秒周期、15 秒过期处理；无权限、缺字段与未配置采集能力返回 unknown/unsupported。节点清单按连接/显式探测获取，实际步数来自 `/ws`，队列只保存计数，系统启动参数和外部工作流不进入公开快照。只读采集不写 ComfyUI，不推进业务事件和配置修订。当前接口与安装验证使用替身，真实部署实测保留。
+
+### M1/1.6 实现边界
+
+格式 5 以独立业务 revision 和持久事件序号管理 Task、不可变方案内容/目标快照、用户执行范围、queued Run 与命令回执。`get_execution` 在一个读事务内取得业务对象、暂停原因和游标；配置 revision 不与业务 revision 混用。HTTP 和 MCP 共用 command 用例，CLI 恢复派发也写回执。
+
+用户范围固定配方/输入哈希、允许目标和参数候选值、最大次数及停止条件。仅显式生效才替换旧方案，替换/停止与旧 queued 运行的取消同事务；已有 intent 保留。业务命令先检查 command_id，再检查 expected_revision；状态、修订、事件和回执在同一短事务提交。数据库约束同方案/动作唯一和项目在途生成唯一。
+
+内部 `reserve_submission` 在写事务内复核当前限制、目标身份、能力、节点和外部空队列，保存 intent、client_id、最终图哈希与目标快照，同时预留一次额度并写事件；事件失败全部回滚。旧 intent 返回 reused，后续 M2 必须对账，不能重新发送。manual_pause、review_hold 与 reconciliation_required 独立保存，普通恢复只改手动暂停。当前不启动生成消费循环、不发送 POST /prompt，配方/输入文件校验与真实回执、对账由 M2 接续。

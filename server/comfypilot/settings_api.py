@@ -63,7 +63,10 @@ def install_settings_routes(app: FastAPI, project: Project, runtime: RuntimeReco
 
     @app.middleware("http")
     async def control_boundary(request: Request, call_next):
-        if request.url.path.startswith(("/api/config", "/api/targets")) and request.method != "GET":
+        if (
+            request.url.path.startswith(("/api/config", "/api/targets", "/api/execution"))
+            and request.method != "GET"
+        ):
             origin = request.headers.get("origin")
             hosts = {f"127.0.0.1:{runtime.port}", f"localhost:{runtime.port}"}
             if request.headers.get("host") not in hosts or (

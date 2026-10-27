@@ -9,7 +9,9 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 
 @contextmanager
-def comfy_server(*, events=True, delay=0, partial=False, progress=True, disconnect=False):
+def comfy_server(
+    *, events=True, delay=0, partial=False, progress=True, disconnect=False, busy=True
+):
     app = FastAPI()
     calls = []
     tokens = []
@@ -50,7 +52,9 @@ def comfy_server(*, events=True, delay=0, partial=False, progress=True, disconne
     @app.get("/queue")
     async def queue():
         return {
-            "queue_running": [[0, "external-prompt", {"private": "do-not-export"}, {}, []]],
+            "queue_running": [[0, "external-prompt", {"private": "do-not-export"}, {}, []]]
+            if busy
+            else [],
             "queue_pending": [],
         }
 
