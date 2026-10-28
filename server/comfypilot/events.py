@@ -23,11 +23,20 @@ def state_snapshot(project: Project) -> dict:
         state.update(read_versions(db))
         state.update(read_review_items(db, unresolved=False))
         state.update(read_decisions(db))
+        state["activity"] = [
+            dict(row)
+            for row in db.execute(
+                "SELECT event_id,revision,action,object_id,source,created_at "
+                "FROM business_events ORDER BY event_id DESC LIMIT 20"
+            )
+        ]
     for plan in state["plans"]:
         plan.pop("resources", None)
         plan.pop("targets", None)
     for run in state["runs"]:
-        run["has_intent"] = run.pop("intent") is not None
+        intent = run.pop("intent")
+        run["has_intent"] = intent is not None
+        run["started_at"] = intent["created_at"] if intent else None
         run["document"] = {
             key: value
             for key, value in run["document"].items()
@@ -63,7 +72,11 @@ def read_events(project: Project, after: int, limit: int) -> dict:
 
 
 def install_event_routes(
-    app: FastAPI, project: Project, runtime: RuntimeRecord, stopping: Callable[[], bool] | None
+    app: FastAPI,
+    project: Project,
+    runtime: RuntimeRecord,
+    stopping: Callable[[], bool] | None,
+    monitoring: Callable[[], dict],
 ) -> None:
     def reply(data):
         return {
@@ -74,7 +87,7 @@ def install_event_routes(
 
     @app.get("/api/state")
     def snapshot():
-        return reply(state_snapshot(project))
+        return reply({**state_snapshot(project), "monitoring": monitoring()})
 
     @app.get("/api/events")
     def events(
@@ -112,7 +125,9 @@ def install_event_routes(
                 state = await asyncio.to_thread(state_snapshot, project)
                 yield (
                     "event: latest\ndata: "
-                    + json.dumps(reply({"collections": state["collections"]}))
+                    + json.dumps(
+                        reply({"collections": state["collections"], "monitoring": monitoring()})
+                    )
                     + "\n\n"
                 )
                 await asyncio.sleep(1)

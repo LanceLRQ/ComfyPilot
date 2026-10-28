@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { z } from "zod";
 import { Assets } from "./Assets";
-import { Monitor } from "./Monitor";
 import { Resources } from "./Resources";
 import { Settings } from "./Settings";
 import { Versions } from "./Versions";
@@ -182,7 +181,6 @@ function App() {
             <span className="stage">当前阶段：实时审片</span>
           </article>
         </section>
-        <Monitor />
         <Settings />
         <Resources />
         <Assets />

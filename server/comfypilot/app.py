@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -20,7 +21,7 @@ from pydantic import BaseModel
 from comfypilot.events import install_event_routes
 from comfypilot.execution_api import install_execution_routes
 from comfypilot.media_api import install_media_routes
-from comfypilot.monitoring import get_target_status
+from comfypilot.monitoring import get_target_status, metric
 from comfypilot.project import Project, read_dispatch, read_project, set_dispatch
 from comfypilot.resources_api import install_resource_routes
 from comfypilot.review_api import install_review_routes
@@ -120,7 +121,6 @@ def create_app(
     install_execution_routes(app, project, runtime)
     install_resource_routes(app, project, runtime)
     install_media_routes(app, project, runtime)
-    install_event_routes(app, project, runtime, stopping)
     install_review_routes(app, project, runtime)
 
     def worker_status() -> WorkerStatus:
@@ -160,26 +160,47 @@ def create_app(
             dispatch=read_dispatch(project),
         )
 
+    monitored_at = 0.0
+    monitored: dict = {}
+
+    def monitor_view():
+        nonlocal monitored, monitored_at
+        if monitored and time.monotonic() - monitored_at < 5:
+            return monitored
+        current = get_project(project)
+        targets = []
+        for target in current["config"]["targets"]:
+            sample = get_target_status(
+                project,
+                runtime.instance_id,
+                runtime.worker.pid if runtime.worker else 0,
+                target["id"],
+                current=current,
+            )
+            sample.pop("node_schemas", None)
+            sample.pop("node_classes", None)
+            targets.append(sample)
+        space = shutil.disk_usage(project.root)
+        monitored = {
+            "worker": worker_status().model_dump(mode="json"),
+            "platform": {
+                "api": metric(True, "platform.api"),
+                "disk_free": metric(space.free, "platform.project_filesystem", "bytes"),
+                "disk_total": metric(space.total, "platform.project_filesystem", "bytes"),
+            },
+            "targets": targets,
+        }
+        monitored_at = time.monotonic()
+        return monitored
+
+    install_event_routes(app, project, runtime, stopping, monitor_view)
+
     @app.get("/api/status")
     def monitoring():
-        current = get_project(project)
         return {
             "project_id": str(project.identity.project_id),
             "instance_id": str(runtime.instance_id),
-            "data": {
-                "worker": worker_status().model_dump(mode="json"),
-                "dispatch": read_dispatch(project),
-                "targets": [
-                    get_target_status(
-                        project,
-                        runtime.instance_id,
-                        runtime.worker.pid if runtime.worker else 0,
-                        target["id"],
-                        current=current,
-                    )
-                    for target in current["config"]["targets"]
-                ],
-            },
+            "data": {**monitor_view(), "dispatch": read_dispatch(project)},
         }
 
     web = Path(__file__).parent / "web"

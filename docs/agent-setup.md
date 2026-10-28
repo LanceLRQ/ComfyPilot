@@ -1,6 +1,6 @@
 # Agent 接入与 M1 验收
 
-日期：2026-10-28（Asia/Shanghai）。当前交付项目平台、42 个 MCP 工具和操作 Skill，包含资源快照、标准预检、[素材导入与显式片段](media-assets.md)及[目标副本查询](asset-adapters.md)。本机目录及[远程素材桥接](remote-assets.md)适配器、[生成提交和对账](generation.md)、[自动收片与基础预览](collection.md)已接入；两种部署的[真实 H3 链路](h3-validation.md)已验证，[逐段审片与版本反馈](review-workbench.md)已接入，返工、明确采用和来源清单已接入，完整监控继续开发。
+日期：2026-10-28（Asia/Shanghai）。当前交付项目平台、42 个 MCP 工具和操作 Skill，包含资源快照、标准预检、[素材导入与显式片段](media-assets.md)及[目标副本查询](asset-adapters.md)。本机目录及[远程素材桥接](remote-assets.md)适配器、[生成提交和对账](generation.md)、[自动收片与基础预览](collection.md)已接入；两种部署的[真实 H3 链路](h3-validation.md)已验证，[逐段审片与版本反馈](review-workbench.md)已接入，返工、明确采用和来源清单已接入，共享生产监控已接入，MCP控制与上下文接续继续开发。
 
 ## 1. 安装与 Skill 定位
 

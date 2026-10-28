@@ -1,5 +1,6 @@
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 import { z } from "zod";
+import { monitoringSchema } from "./monitoring";
 
 export const regionSchema = z.object({
   x: z.number(),
@@ -32,6 +33,39 @@ export const workspaceSchema = z.object({
   project_id: z.string().uuid(),
   instance_id: z.string().uuid(),
   data: z.object({
+    monitoring: monitoringSchema,
+    tasks: z.array(
+      z.object({ id: z.string(), active_plan_id: z.string().nullable(), goal: z.string() }),
+    ),
+    plans: z.array(z.object({ id: z.string(), task_id: z.string(), status: z.string() })),
+    runs: z.array(
+      z.object({
+        id: z.string(),
+        plan_id: z.string(),
+        action_index: z.number(),
+        status: z.string(),
+        has_intent: z.boolean(),
+        started_at: z.string().nullable(),
+        document: z.object({
+          step: z.object({ target_id: z.string(), segment_id: z.string().optional() }).optional(),
+          dispatch_blocked: z.object({ code: z.string() }).optional(),
+        }),
+      }),
+    ),
+    dispatch: z.object({
+      manual_pause: z.boolean(),
+      review_hold: z.boolean(),
+      reconciliation_required: z.boolean(),
+    }),
+    activity: z.array(
+      z.object({
+        event_id: z.number(),
+        action: z.string(),
+        source: z.string(),
+        created_at: z.string(),
+        object_id: z.string().nullable(),
+      }),
+    ),
     revision: z.number().int(),
     event_cursor: z.number().int(),
     feedback: z.array(feedbackSchema),
@@ -159,7 +193,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           try {
             const result = workspaceSchema
               .pick({ project_id: true, instance_id: true })
-              .extend({ data: workspaceSchema.shape.data.pick({ collections: true }) })
+              .extend({
+                data: workspaceSchema.shape.data.pick({ collections: true, monitoring: true }),
+              })
               .parse(JSON.parse(event.data));
             if (result.instance_id !== instance || result.project_id !== project) {
               disconnected();
@@ -167,7 +203,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             }
             setSnapshot((previous) =>
               previous
-                ? { ...previous, data: { ...previous.data, collections: result.data.collections } }
+                ? {
+                    ...previous,
+                    data: {
+                      ...previous.data,
+                      collections: result.data.collections,
+                      monitoring: result.data.monitoring,
+                    },
+                  }
                 : previous,
             );
           } catch {

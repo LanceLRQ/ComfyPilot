@@ -126,3 +126,22 @@ def test_state_uses_one_read_transaction(generation_workspace, monkeypatch):
     assert snapshot["revision"] == prior["revision"]
     assert snapshot["event_cursor"] == prior["event_cursor"]
     assert get_execution(project)["revision"] > snapshot["revision"]
+
+
+def test_shared_monitoring_snapshot_and_latest_have_sources_without_catalog(tmp_path):
+    with running_service(tmp_path / "monitor-view") as (address, _, _):
+        with urlopen(address + "/api/state", timeout=3) as response:
+            snapshot = json.load(response)["data"]
+        assert snapshot["monitoring"]["worker"]["status"] == "running"
+        disk = snapshot["monitoring"]["platform"]["disk_free"]
+        assert disk["value"] > 0 and disk["source"] == "platform.project_filesystem"
+        assert disk["observed_at"] and disk["expires_at"]
+        assert snapshot["activity"] == []
+        with urlopen(address + "/api/events/stream", timeout=3) as response:
+            assert response.readline() == b"event: latest\n"
+            payload = json.loads(response.readline().decode().removeprefix("data: "))["data"]
+        assert payload["monitoring"]["platform"] == snapshot["monitoring"]["platform"]
+        assert "node_schemas" not in json.dumps(payload)
+        with urlopen(address + "/api/status", timeout=3) as response:
+            monitoring = json.load(response)["data"]
+        assert monitoring["platform"] == payload["monitoring"]["platform"]

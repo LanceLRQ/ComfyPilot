@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { Decisions, Delivery } from "./Decisions";
 import { Feedback } from "./Feedback";
+import { Monitor } from "./Monitor";
+import { ProductionActivity } from "./ProductionActivity";
 import { useWorkspace, workspaceSchema } from "./Workspace";
 
 const versionSchema = workspaceSchema.shape.data.shape.versions.element;
@@ -278,7 +280,9 @@ export function Versions() {
             />
           </div>
         )}
+        <Monitor />
       </div>
+      <ProductionActivity />
       <Delivery />
     </section>
   );
