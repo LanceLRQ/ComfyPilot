@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
+import { Feedback } from "./Feedback";
 import { useWorkspace, workspaceSchema } from "./Workspace";
 
 const versionSchema = workspaceSchema.shape.data.shape.versions.element;
@@ -17,8 +18,13 @@ const detailSchema = z.object({
 });
 export type Version = z.infer<typeof versionSchema>;
 
-function ReviewPlayer({ version }: { version: Version }) {
-  const candidate = useRef<HTMLVideoElement>(null);
+function ReviewPlayer({
+  version,
+  candidate,
+}: {
+  version: Version;
+  candidate: React.RefObject<HTMLVideoElement | null>;
+}) {
   const original = useRef<HTMLVideoElement>(null);
   const [detail, setDetail] = useState<z.infer<typeof detailSchema>["data"] | null>(null);
   const [error, setError] = useState("");
@@ -149,6 +155,7 @@ function ReviewPlayer({ version }: { version: Version }) {
 }
 
 export function Versions() {
+  const candidate = useRef<HTMLVideoElement>(null);
   const { snapshot, stale } = useWorkspace();
   const versions = snapshot?.data.versions ?? [];
   const [clip, setClip] = useState("");
@@ -244,7 +251,21 @@ export function Versions() {
                 ))}
               </select>
             </label>
-            <ReviewPlayer key={selected.id} version={selected} />
+            <ReviewPlayer key={selected.id} version={selected} candidate={candidate} />
+            <Feedback
+              version={selected}
+              video={candidate}
+              onLocate={(id, time) => {
+                const version = versions.find((item) => item.id === id);
+                if (!version) return;
+                const key = `${version.source.inputs.find((item) => item.slot === "video")?.asset_id ?? version.run_id}:${version.slot}`;
+                setClip(key);
+                setChoices((previous) => ({ ...previous, [key]: id }));
+                window.setTimeout(() => {
+                  if (candidate.current) candidate.current.currentTime = time;
+                }, 100);
+              }}
+            />
           </div>
         )}
       </div>

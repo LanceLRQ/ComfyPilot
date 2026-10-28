@@ -192,9 +192,23 @@ async def advance_generation(project: Project, instance: UUID, worker_pid: int) 
         if active:
             await reconcile(project, active)
             return
-        if state["dispatch"]["paused"]:
+        dispatch = state["dispatch"]
+        if (
+            dispatch["manual_pause"]
+            or dispatch["reconciliation_required"]
+            or (dispatch["review_hold"] and not state["review_holds"])
+        ):
             return
-        run = next((run for run in state["runs"] if run["status"] == "queued"), None)
+        held_tasks = {hold["task_id"] for hold in state["review_holds"]}
+        held_plans = {plan["id"] for plan in state["plans"] if plan["task_id"] in held_tasks}
+        run = next(
+            (
+                run
+                for run in state["runs"]
+                if run["status"] == "queued" and run["plan_id"] not in held_plans
+            ),
+            None,
+        )
         if run is None:
             return
         final = await materialize_run(project, run["id"])

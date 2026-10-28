@@ -118,7 +118,7 @@ def test_schema_six_upgrade_preserves_existing_data_and_creates_media_fields(tmp
         db.execute("INSERT INTO user_marker VALUES ('keep')")
     load_project(project.root)
     with sqlite3.connect(project.database) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 9
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 10
         assert db.execute("SELECT value FROM user_marker").fetchone()[0] == "keep"
         assert {row[1] for row in db.execute("PRAGMA table_info(media_assets)")} == {
             "id",
@@ -156,7 +156,7 @@ def test_import_copies_decoded_media_with_independent_identities_and_shared_byte
     assert len(list_assets(project)["assets"]) == 3
     with sqlite3.connect(project.database) as db:
         assert db.execute("SELECT COUNT(*) FROM media_blobs").fetchone()[0] == 2
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 9
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 10
         assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
 
 

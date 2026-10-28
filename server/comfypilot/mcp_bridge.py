@@ -19,7 +19,9 @@ from comfypilot.execution import (
     PauseDispatch,
     ResumeCollection,
     ResumeDispatch,
+    SaveFeedback,
     StopPlan,
+    UpdateFeedback,
 )
 from comfypilot.lifecycle import inspect_service, start_service, stop_service
 from comfypilot.media import AssetRequest, ExtractClipRequest, ImportAssetRequest, MediaJobRequest
@@ -141,6 +143,14 @@ class ResumeCollectionArguments(ConnectionArguments, ResumeCollection):
     pass
 
 
+class SaveFeedbackArguments(ConnectionArguments, SaveFeedback):
+    pass
+
+
+class UpdateFeedbackArguments(ConnectionArguments, UpdateFeedback):
+    pass
+
+
 class ToolError(BaseModel):
     code: str
     message: str
@@ -160,6 +170,7 @@ class ApplicationReply(BaseModel):
 
 
 PROJECT_API = {
+    "list_review_items": ("GET", "/api/review/items"),
     "list_versions": ("GET", "/api/versions"),
     "list_replicas": ("GET", "/api/assets/replicas"),
     "list_assets": ("GET", "/api/assets"),
@@ -182,6 +193,8 @@ PROJECT_API = {
             "pause_dispatch",
             "resume_dispatch",
             "resume_collection",
+            "save_feedback",
+            "update_feedback",
         )
     },
     "get_execution": ("GET", "/api/execution"),
@@ -199,6 +212,24 @@ PROJECT_API = {
 
 # 仅定义静态协议元数据；不得在此探测项目、服务或 ComfyUI。
 TOOL_DEFINITIONS = {
+    "list_review_items": (
+        ConnectionArguments,
+        "读取未解决的版本反馈及截图引用，addressed不等于用户verified。",
+        True,
+        True,
+    ),
+    "save_feedback": (
+        SaveFeedbackArguments,
+        "保存版本反馈与时间/圈选/截图引用；当前方案需要修改会原子挂起关联任务。",
+        False,
+        False,
+    ),
+    "update_feedback": (
+        UpdateFeedbackArguments,
+        "记录Agent已处理或明确用户验证，不将技术判断当作用户验证。",
+        False,
+        False,
+    ),
     "list_versions": (ConnectionArguments, "读取已校验的可审版本、来源和技术检查。", True, True),
     "list_replicas": (
         ConnectionArguments,

@@ -1,12 +1,40 @@
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 import { z } from "zod";
 
+export const regionSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  width: z.number(),
+  height: z.number(),
+});
+export const screenshotSchema = z.object({
+  id: z.string(),
+  url: z.string(),
+  candidate_seconds: z.number(),
+});
+export const feedbackSchema = z.object({
+  id: z.string(),
+  version_id: z.string(),
+  task_id: z.string(),
+  plan_id: z.string(),
+  kind: z.enum(["note", "needs_changes"]),
+  text: z.string(),
+  status: z.enum(["open", "addressed", "verified"]),
+  start_seconds: z.number(),
+  end_seconds: z.number(),
+  regions: z.array(regionSchema),
+  screenshot: screenshotSchema.nullable(),
+  source: z.string(),
+  original_range: z.object({ start_seconds: z.number(), end_seconds: z.number() }).nullable(),
+});
+
 export const workspaceSchema = z.object({
   project_id: z.string().uuid(),
   instance_id: z.string().uuid(),
   data: z.object({
     revision: z.number().int(),
     event_cursor: z.number().int(),
+    feedback: z.array(feedbackSchema),
     collections: z.array(
       z.object({
         run_id: z.string(),

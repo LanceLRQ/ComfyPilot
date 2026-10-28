@@ -65,7 +65,14 @@ def install_settings_routes(app: FastAPI, project: Project, runtime: RuntimeReco
     async def control_boundary(request: Request, call_next):
         if (
             request.url.path.startswith(
-                ("/api/config", "/api/targets", "/api/execution", "/api/resources", "/api/assets")
+                (
+                    "/api/config",
+                    "/api/targets",
+                    "/api/execution",
+                    "/api/resources",
+                    "/api/assets",
+                    "/api/review",
+                )
             )
             and request.method != "GET"
         ):

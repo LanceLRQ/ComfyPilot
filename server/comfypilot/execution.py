@@ -6,7 +6,7 @@ from hashlib import sha256
 from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
 from comfypilot.monitoring import get_target_status
 from comfypilot.project import Project, ProjectError, dispatch_state
@@ -96,6 +96,38 @@ class ResumeCollection(Command):
     run_id: Identifier
 
 
+class Region(StrictModel):
+    x: float = Field(ge=0, le=1)
+    y: float = Field(ge=0, le=1)
+    width: float = Field(gt=0, le=1)
+    height: float = Field(gt=0, le=1)
+
+    @model_validator(mode="after")
+    def contained(self):
+        if self.x + self.width > 1 or self.y + self.height > 1:
+            raise ValueError("圈选区域必须在画面范围内")
+        return self
+
+
+class SaveFeedback(Command):
+    action: Literal["save_feedback"] = "save_feedback"
+    version_id: Identifier
+    kind: Literal["note", "needs_changes"]
+    text: str = Field(min_length=1, max_length=4000, pattern=r"\S")
+    start_seconds: float = Field(default=0.0, ge=0)
+    end_seconds: float = Field(default=0.0, ge=0)
+    screenshot_id: Identifier | None = None
+    regions: list[Region] = Field(default_factory=list, max_length=10)
+
+
+class UpdateFeedback(Command):
+    action: Literal["update_feedback"] = "update_feedback"
+    feedback_id: Identifier
+    status: Literal["addressed", "verified"]
+    note: str = Field(min_length=1, max_length=4000, pattern=r"\S")
+    user_statement: str | None = Field(default=None, min_length=1, max_length=4000, pattern=r"\S")
+
+
 AnyCommand = (
     CreateTask
     | CreatePlan
@@ -105,6 +137,8 @@ AnyCommand = (
     | PauseDispatch
     | ResumeDispatch
     | ResumeCollection
+    | SaveFeedback
+    | UpdateFeedback
 )
 COMMAND_SCHEMA = TypeAdapter(Annotated[AnyCommand, Field(discriminator="action")])
 
@@ -161,6 +195,7 @@ def read_execution(db: sqlite3.Connection) -> dict:
     state["event_cursor"] = db.execute(
         "SELECT COALESCE(MAX(event_id),0) FROM business_events"
     ).fetchone()[0]
+    state["review_holds"] = [dict(row) for row in db.execute("SELECT * FROM review_holds")]
     return state
 
 
@@ -376,6 +411,10 @@ def apply_command(project: Project, command: AnyCommand) -> dict:
                     "plan_id": command.plan_id,
                     "run_ids": [existing[index] for index in indices],
                 }
+        elif isinstance(command, (SaveFeedback, UpdateFeedback)):
+            from comfypilot.review import apply_review_command
+
+            result, object_id = apply_review_command(db, project, command)
         elif isinstance(command, ResumeCollection):
             run = db.execute(
                 "SELECT status,document FROM execution_runs WHERE id=?", (command.run_id,)
@@ -452,7 +491,14 @@ def reserve_submission(
         control = db.execute(
             "SELECT review_hold,reconciliation_required FROM execution_control"
         ).fetchone()
-        if any(control) or db.execute("SELECT paused FROM service_control").fetchone()[0]:
+        held = db.execute("SELECT 1 FROM review_holds WHERE task_id=?", (plan.task_id,)).fetchone()
+        legacy_hold = control[0] and not db.execute("SELECT 1 FROM review_holds").fetchone()
+        if (
+            held
+            or legacy_hold
+            or control[1]
+            or db.execute("SELECT paused FROM service_control").fetchone()[0]
+        ):
             raise ProjectError("dispatch_paused", "派发仍被手动暂停、审片挂起或待核对状态阻止。")
         if db.execute(
             "SELECT id FROM execution_runs WHERE status IN "

@@ -23,6 +23,7 @@ from comfypilot.media_api import install_media_routes
 from comfypilot.monitoring import get_target_status
 from comfypilot.project import Project, read_dispatch, read_project, set_dispatch
 from comfypilot.resources_api import install_resource_routes
+from comfypilot.review_api import install_review_routes
 from comfypilot.runtime import RuntimeRecord, ServiceHealth, process_identity, write_runtime
 from comfypilot.settings import get_project
 from comfypilot.settings_api import install_settings_routes
@@ -120,6 +121,7 @@ def create_app(
     install_resource_routes(app, project, runtime)
     install_media_routes(app, project, runtime)
     install_event_routes(app, project, runtime, stopping)
+    install_review_routes(app, project, runtime)
 
     def worker_status() -> WorkerStatus:
         with closing(sqlite3.connect(project.database)) as db:
