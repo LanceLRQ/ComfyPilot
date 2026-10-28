@@ -1,0 +1,20 @@
+{
+  "package": "comfypilot",
+  "version": "0.1.0.dev0",
+  "project_schema_version": 1,
+  "database_user_version": 14,
+  "backup_format": 1,
+  "mcp_sdk": "2.3.0",
+  "mcp_transport": "stdio",
+  "mcp_connection": "explicit project_root and instance-bound connection_ref",
+  "asset_bridge": {
+    "protocol": 1,
+    "namespace": "ComfyPilot",
+    "required_transfer_features": ["upload", "download", "stat", "known"],
+    "required_cleanup_feature": "delete"
+  },
+  "supported_platforms": ["macOS", "Linux"],
+  "python_minimum": "3.12",
+  "preview_baseline": "H.264 MP4",
+  "media_tools": ["ffmpeg", "ffprobe", "libx264"]
+}

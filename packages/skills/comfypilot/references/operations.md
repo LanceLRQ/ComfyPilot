@@ -44,11 +44,11 @@ stop_conditions 支持 on_failure（失败后停止）与 after_limit；最大�
 - 项目总生成并发为 1；内部预留意图会再检查所有暂停原因、次数、目标身份、fresh 的生成能力/节点和外部空队列。监测过期时等待或显式探测，不当作正常。
 - 目标改址或停用后旧方案不会偷偷换端。保存新方案前明确目标；旧在途记录始终保持原快照。
 - 内部 intent、额度和事件同事务。返回 reused 的原 intent 是待对账证据，不是再次发送许可。不明提交占用一次额度。
-- 实际生成消费与回执对账已接入。意图已存在时仅核对原目标、原prompt_id；丢失prompt_id时按项目/Run/意图标记匹配，不明状态保留并阻止新提交。只有history明确success且completed才进入collecting，节点完成不算成功。后台已自动收片，list_versions 返回当前收片阶段、字节/错误及已完整解码并通过配方规格检查的ready版本。非H.264/MP4视频会有独立检查的播放代理；原片和代理不能混淆。不同Run即使字节相同也是独立版本，不合并来源。当前支持反馈、技术评价、明确用户采用及来源清单；提供get_context/read_events/wait_for_events接续和有界事件等待，清理仍未交付；不要调用设计文档中的未来工具，也不要编辑 SQLite 完成这些操作。
+- 实际生成消费与回执对账已接入。意图已存在时仅核对原目标、原prompt_id；丢失prompt_id时按项目/Run/意图标记匹配，不明状态保留并阻止新提交。只有history明确success且completed才进入collecting，节点完成不算成功。后台已自动收片，list_versions 返回当前收片阶段、字节/错误及已完整解码并通过配方规格检查的ready版本。非H.264/MP4视频会有独立检查的播放代理；原片和代理不能混淆。不同Run即使字节相同也是独立版本，不合并来源。当前支持反馈、技术评价、明确用户采用及来源清单；提供get_context/read_events/wait_for_events接续和有界事件等待，清理与备份恢复已接入，按下方范围和复核流程操作；不要编辑 SQLite 绕过平台。
 
 收片 checkpoint 保存阶段、已传字节、输出指纹、暂存token、尝试次数与下次时间。临时读取错误最多3次额外重试，耗尽后blocked；缺工具/空间直接blocked；媒体损坏或规格不符使Run.failed。按既有用户指示修复环境后使用resume_collection，首次恢复使用新的UUID command_id；同一次resume_collection请求回执丢失时才复用这次恢复的ID。原execute_plan及先前恢复轮次的command_id均不能拿来做新恢复，否则会command_mismatch或只返回旧回执。沿用的是run_id，不用execute_plan重跑。部分文件会从头重传，非通用字节续传；同名文件变化仍阻塞，不能借恢复覆盖旧指纹。
 
-远程素材配置assets.mode=bridge，comfypilot bridge-path返回完整扩展目录；只通过用户指定的管理通道安装，核对队列空闲后按原方式重启并probe_target验证。桥接仅允许项目命名空间下输入上传、声明输出下载、stat与known列表；没有shell、删除或任意主机控制。未安装unsupported、断线unknown，不自动切换目标。原Run输出依旧须完整传输/解码/配方检查后才可审。
+远程素材配置assets.mode=bridge，comfypilot bridge-path返回完整扩展目录；只通过用户指定的管理通道安装，核对队列空闲后按原方式重启并probe_target验证。桥接仅允许项目命名空间下输入上传、声明输出下载、stat与known列表；受限清理另需 capabilities.features 含 delete，没有 shell 或任意主机控制。未安装unsupported、断线unknown，不自动切换目标。原Run输出依旧须完整传输/解码/配方检查后才可审。
 
 
 ## 调整后续工作
@@ -67,3 +67,18 @@ get_context使用同一业务读取事务保存revision、event_cursor、有效�
 read_events默认after=0、limit=50，上限100；wait_for_events同样分页，timeout_seconds默认20、范围0–25。超时返回timed_out，关闭平台会返回interrupted；无事件时游标不前进。等待不阻塞其他MCP工具，客户端退出不停止Worker，离线期间产生的业务事件仍可补读。HTTP为GET /api/context、POST /api/events/read和/api/events/wait；原GET /api/events和网页SSE继续可用。
 
 get_run/list_runs提供references，完整图、原始history和checks通过独立GET /api/execution/runs/{run_id}/evidence?kind=graph|history|checks读取；未产生时返回evidence_unavailable。context只给日志路径，不返回日志内容或凭据。所有HTTP引用相对于connect_service的面板URL；使用项目机器上的既有管理通道读取，不绕过实例或源限制。
+
+
+## 素材维护、LAN 与备份
+
+| 用户目标 | 操作与可核对结果 |
+| --- | --- |
+| 清理指定执行端副本 | inspect_storage(target_id, replica_ids?, roles?) 只盘点；明确范围后 prepare_cleanup(user_instruction, replica_ids) 保存固定 plan_id；execute_cleanup(plan_id, command_id) 才物理删除 |
+| 回执不明或失败 | list_cleanup 读取计划/回执；同命令返回原结果。失败项用新 command_id 重试同 plan_id，仍复核引用与指纹。changed/protected 不当作可删，不能扩大清单 |
+| 其他设备审片 | update_project 设置 server.host=0.0.0.0 及实际 IPv4 lan_hosts，停止再启动；本机 MCP 继续回环连接，远端只审片和脱敏监测 |
+| 导出 | export_project(destination) 写项目外尚不存在的新目录；复制完整 bundle，不含平台秘密/PID/锁/暂存半文件 |
+| 恢复 | restore_project(project_root, bundle_path) 无需旧服务连接；目标是父目录已存在的新目录，返回新 UUID、暂停和禁用目标。旧运行是历史，不自动重放或接管旧远端资产 |
+
+维护保护活动 Run、未来方案、待审/待核对、未确认反馈及未知引用；项目原件须可读且哈希匹配。删除字节为文件大小估算，磁盘空闲变化独立记录，不把移动到同盘回收站当释放。只有标准 HTTP 或旧桥接时解释 cleanup_unavailable，按用户已给管理通道升级扩展，不自行换 SSH 或扫描其他项目。
+
+恢复先验证清单/路径/hash/SQLite完整性/来源引用；失败保留证据，改用新目录，不覆盖现有项目。恢复后重新检查媒体工具、目标和有效方案；不能通过重放旧command或改库继续旧生成。移动原项目先stop，整目录移动后使用新绝对路径start/connect，UUID保持。升级前备份并保留旧环境，较旧程序不能读较新数据库；需要回退时使用升级前副本。comfypilot distribution-path 返回安装版锁文件、协议和安装说明。

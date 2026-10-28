@@ -38,6 +38,9 @@ packages = ["server/comfypilot"]
 "packages/skills/comfypilot" = "comfypilot/skills/comfypilot"
 "presets" = "comfypilot/presets"
 "extensions/comfypilot_assets" = "comfypilot/extensions/comfypilot_assets"
+"packages/distribution" = "comfypilot/distribution"
+"docs/installation.md" = "comfypilot/distribution/installation.md"
+"LICENSE" = "comfypilot/distribution/LICENSE"
 
 [tool.hatch.build]
 artifacts = ["server/comfypilot/web/**"]

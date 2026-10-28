@@ -16,3 +16,4 @@ check:
 
 package: web
 	uv build --wheel
+	cp packages/distribution/requirements-runtime.txt dist/requirements-runtime.txt

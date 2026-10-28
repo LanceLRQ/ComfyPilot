@@ -23,6 +23,7 @@ def main(argv: list[str] | None = None) -> int:
     init.add_argument("--project-root", required=True, type=Path)
     commands.add_parser("skill-path", help="只读显示随安装包交付的 Agent Skill 目录")
     commands.add_parser("bridge-path", help="只读显示随安装包交付的 ComfyUI 素材桥接目录")
+    commands.add_parser("distribution-path", help="只读显示锁定依赖和协议说明目录")
     export = commands.add_parser("export", help="导出带校验清单的项目备份")
     export.add_argument("--project-root", required=True, type=Path)
     export.add_argument("--destination", required=True, type=Path)
@@ -42,6 +43,14 @@ def main(argv: list[str] | None = None) -> int:
             child.add_argument("--port", type=int, help="本次服务端口，默认读取项目配置")
     args = parser.parse_args(argv)
     try:
+        if args.command == "distribution-path":
+            folder = Path(__file__).parent / "distribution"
+            if not folder.is_dir():
+                folder = Path(__file__).resolve().parents[2] / "packages/distribution"
+            if not (folder / "protocols.json").is_file():
+                raise ProjectError("distribution_missing", "安装包缺少交付资料，请安装完整包。")
+            print(json.dumps({"path": str(folder.resolve())}))
+            return 0
         if args.command == "bridge-path":
             folder = Path(__file__).parent / "extensions/comfypilot_assets"
             if not folder.is_dir():

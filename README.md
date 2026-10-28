@@ -4,7 +4,7 @@
 
 产品目标：用户在 Claude Code、Codex 等工具里提需求，Agent 按 Skill 在当前项目目录启动 ComfyPilot，通过 MCP 管理任务与执行。用户打开浏览器看进度、审片和提出修改意见。生成可以交给本机或远程 ComfyUI。
 
-当前已实现 M1/1.1–1.6 和 M2 第一条视频链路：项目服务、默认待机的 stdio MCP、显式连接、多目标配置、资源快照、素材导入与显式片段、H3 配方、持久提交/对账、[自动收片和基础预览](docs/collection.md)、幂等恢复及远程素材桥接。[真实链路验收](docs/h3-validation.md)已覆盖 macOS 远程桥接与 Linux 同机目录模式，包含重启接续和工具缺失后的恢复。M3 已接入逐段审片、截图圈选、返工与明确采用、共享监控、MCP 控制和 Agent 新会话接续；[M3 联合验收](docs/m3-validation.md)区分已验证场景与保留项。M1/1.7 双宿主完整矩阵、M2/2.2 安装回退等实测项仍保留；M4 清理交付继续开发。文档更新于 2026-10-28（Asia/Shanghai）。
+当前已实现 M1/1.1–1.6 和 M2 第一条视频链路：项目服务、默认待机的 stdio MCP、显式连接、多目标配置、资源快照、素材导入与显式片段、H3 配方、持久提交/对账、[自动收片和基础预览](docs/collection.md)、幂等恢复及远程素材桥接。[真实链路验收](docs/h3-validation.md)已覆盖 macOS 远程桥接与 Linux 同机目录模式，包含重启接续和工具缺失后的恢复。M3 已接入逐段审片、截图圈选、返工与明确采用、共享监控、MCP 控制和 Agent 新会话接续；[M3 联合验收](docs/m3-validation.md)区分已验证场景与保留项。M1/1.7 双宿主完整矩阵、M2/2.2 安装回退等实测项仍保留；M4 已实现[清理](docs/asset-cleanup.md)、[LAN 审片](docs/lan-review.md)及[备份恢复](docs/project-backup.md)，[安装与兼容说明](docs/installation.md)随包交付；发布仍受真实环境保留项限制。文档更新于 2026-10-28（Asia/Shanghai）。
 
 ## 本地开发与运行
 
@@ -147,12 +147,13 @@ make package
 
 `make check` 依次执行 Ruff 诊断与格式检查、Biome、TypeScript 类型检查、Web 构建和服务端测试。测试覆盖项目与进程隔离、迁移、恢复、持久暂停、静态资源边界，以及真实 stdio 客户端的待机零副作用、显式连接、失效引用、多个桥接器和宿主退出。
 
-`make package` 先构建页面，再输出 `dist/comfypilot-0.1.0.dev0-py3-none-any.whl`。wheel 包含页面静态资源，安装运行时无需 Node.js；仍需 Python 及包声明的运行依赖。安装包已在脱离源码的独立虚拟环境中完成初始化、服务和页面冒烟验证。
+`make package` 先构建页面，再输出 `dist/comfypilot-0.1.0.dev0-py3-none-any.whl` 和带哈希的 `dist/requirements-runtime.txt`。安装与升级见[操作说明](docs/installation.md)。wheel 包含页面静态资源，安装运行时无需 Node.js；仍需 Python 及包声明的运行依赖。安装包已在脱离源码的独立虚拟环境中完成初始化、服务和页面冒烟验证。
 
 ## 文档入口
 
 | 文档 | 内容 |
 | --- | --- |
+| [安装、兼容与升级](docs/installation.md) | 干净安装、依赖/协议锁定、包内容、升级前备份与回退 |
 | [模块与资源](docs/resources.md) | 声明格式、显式刷新、覆盖映射、目标预检与冻结快照 |
 | [H3 首发配方与环境验收](docs/h3-recipe.md) | 输入输出、固定版本/模型、安装验证/回退、真实环境保留项 |
 | [H3 真实链路验收](docs/h3-validation.md) | 两种部署、重启接续、收片恢复、技术检查及证据复核 |
@@ -164,7 +165,7 @@ make package
 | [架构设计](docs/architecture.md) | 项目目录、进程生命周期、模块契约、执行恢复与素材清理 |
 | [技术调研与分期](docs/research-and-roadmap.md) | 官方方案参考、简化画布设计、分期与仍需实测的问题 |
 
-范围以首版范围与验收为准。实现状态和实测范围以上方说明及验收记录为准；M3 联合验收的独立执行端实测保留，M4 清理交付仍按里程碑推进。
+范围以首版范围与验收为准。实现状态和实测范围以上方说明及验收记录为准；M3 联合验收的独立执行端实测保留，M4 安装与发布验收按真实证据保留未完成项。
 
 ## 第一版
 

@@ -2,7 +2,7 @@
 
 日期：2026-10-27（Asia/Shanghai）
 
-状态：整体设计约定；M1/1.1–1.6 已实现，其他部分按后续里程碑交付。需求见[产品需求](product-requirements.md)，发布边界见[首版范围与验收](mvp-scope.md)，选型依据见[技术调研与分期](research-and-roadmap.md)。
+状态：整体设计约定；项目平台、生成/收片、审片监控、清理、LAN 及备份恢复已实现。安装兼容与真实环境保留项见[安装说明](installation.md)，完整首版发布验收尚未完成。需求见[产品需求](product-requirements.md)，发布边界见[首版范围与验收](mvp-scope.md)，选型依据见[技术调研与分期](research-and-roadmap.md)。
 
 ## 1. 架构结论
 
@@ -498,3 +498,12 @@ M2/2.7 已保存收片重试截止时间、次数、输出指纹和暂存文件�
 M2/2.8 提供可独立安装的ComfyUI素材扩展与HTTP流式客户端，接口和能力边界见[远程素材桥接](remote-assets.md)。扩展随wheel交付但不由平台自动导入；配置桥接后才探测和使用，不增加默认MCP连接行为。
 
 节点事件订阅跟随在途提交意图的 client_id，按冻结目标匹配；启动时和运行中均可从持久意图恢复。切换订阅清空旧进度，目标变更后不将原提交事件混入新目标。WebSocket 断连不触发生成补发，成功与收片仍依据原目标 history。
+
+
+## M4 实现说明
+
+SQLite14增加持久清理计划、删除领取与逐项回执；本机/桥接受限删除必须复核引用、原件和旧指纹，新增相关计划/副本引用在领取期间被拒绝。语义见[素材维护](asset-cleanup.md)。
+
+显式0.0.0.0监听及IPv4 Host白名单，Uvicorn不信任代理头；真实TCP回环才有本机管理能力。LAN仅开放审片命令白名单，状态/SSE/交付来源脱敏，详见[LAN边界](lan-review.md)。
+
+导出使用SQLite backup和固定文件哈希清单；恢复校验引用、创建新UUID、暂停/禁用目标、归档旧运行且不继承远端副本所有权。CLI export/restore及MCP export_project/restore_project已实现，详见[项目备份](project-backup.md)。随包distribution资料固定协议和依赖，开发构建不等同正式发布。
