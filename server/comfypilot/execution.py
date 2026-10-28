@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 from comfypilot.monitoring import get_target_status
 from comfypilot.project import Project, ProjectError, dispatch_state
+from comfypilot.recipes import content_hash
 from comfypilot.resource_preflight import check_frozen_recipe
 from comfypilot.resources import freeze_recipe
 from comfypilot.settings import get_project, resolve_target
@@ -387,7 +388,6 @@ def apply_command(project: Project, command: AnyCommand) -> dict:
 def reserve_submission(
     project: Project, run_id: str, instance_id: UUID, worker_pid: int, graph_hash: str
 ) -> dict:
-    # 这里只建立持久提交边界；M2 才会在事务提交后调用 ComfyUI。
     graph_hash = TypeAdapter(ContentHash).validate_python(graph_hash)
     with closing(sqlite3.connect(project.database, timeout=5)) as db, db:
         db.row_factory = sqlite3.Row
@@ -442,7 +442,16 @@ def reserve_submission(
                 raise ProjectError(
                     "external_queue_busy", "外部队列非空或未知，等待且不接管其他任务。"
                 )
-        frozen = json.loads(run["document"]).get("resource_snapshot")
+        document = json.loads(run["document"])
+        frozen = document.get("resource_snapshot")
+        if materialized := document.get("materialized"):
+            if content_hash(materialized["graph"]) != materialized["graph_hash"]:
+                raise ProjectError("resource_changed", "最终提交图与保存哈希不一致。")
+            frozen = {
+                **frozen,
+                "graph": materialized["graph"],
+                "graph_hash": materialized["graph_hash"],
+            }
         if frozen is None or graph_hash != frozen["graph_hash"]:
             raise ProjectError("resource_changed", "提交图哈希与运行冻结资源不一致。")
         preflight = check_frozen_recipe(frozen, snapshot)

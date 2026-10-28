@@ -33,7 +33,7 @@ description: 在用户指定的本地创作目录，通过 ComfyPilot MCP 管理
 1. `list_resources` 读取有效资源修订；首次为 0，不隐式扫描。修改资源文件后调用 `refresh_resources(expected_revision)`。文件引用是项目根相对路径；同名冲突用配置 `resource_overrides` 显式选择来源后再刷新，失败时保留原快照。
 2. 用 `get_resource_file(resource_hash)` 查看快照原件和说明。画布不能直接执行；Recipe 必须独立提供 API 图、输入/参数绑定、输出规则与完整模块/节点声明。内置 H3 人物替换配方为 `minimax-h3-replacement`，按其说明检查固定规格、依赖与目标能力。
 3. 选择目标并 `probe_target` 后调用 `preflight_recipe(recipe_id, target_id)`。缺节点、未知、定义不匹配、标准预检通过分别处理。预检 15 秒内有效，过期重新探测；不能据此声称节点固定版本已验证、实际安装完成或真实生成通过。
-4. 创建方案时从有效资源快照取得 recipe_hash，完整提供所有输入与参数，required_nodes 对应实际 API 图。平台冻结参数化图模板、配方和关联文件哈希，刷新磁盘不会改写旧方案/Run。本地素材准备已接入，上传 ComfyUI 与最终生成图物化尚未接入。
+4. 创建方案时从有效资源快照取得 recipe_hash，完整提供所有输入与参数及 asset_ids（槽位→已导入素材ID），inputs 同时保存各槽位SHA-256，required_nodes 对应实际 API 图。平台冻结参数化图模板、配方和关联文件哈希，刷新磁盘不会改写旧方案/Run。本机素材适配器已接入：目标 assets 显式配置 mode=local、平台可访问的 input_dir/output_dir 绝对路径，Worker 校验副本指纹并生成最终图；只有HTTP可达不能传视频，远程桥接尚待接入。
 
 ## 导入素材与提取显式片段
 
@@ -47,7 +47,7 @@ description: 在用户指定的本地创作目录，通过 ComfyPilot MCP 管理
 
 准备或调整方案前读 [操作约定](references/operations.md)，按用户已有目标、输入、配方、参数范围、次数和停止条件建立执行指示。缺项明确补齐，不扩大次数或替换输入；范围内连续工作不需要逐步骤确认。
 
-当前实现仅支持方案草稿、生效、幂等入队及持久提交门禁，Worker 尚不派发真实生成。用户要求渲染或审片时说明 M2 尚待接入，可以准备草稿；不要把 queued 说成正在渲染，也不要直接 POST /prompt 补齐未实现链路。
+Worker 已接通真实生成提交与原目标对账。用户已有明确执行指示、素材与可用目标时，可创建方案、生效、execute_plan 入队并按指示 resume_dispatch；提交前仍会检查授权、次数、暂停与空队列。queued 只代表等待，submitted/running 才有外部回执或队列证据；collecting 仅代表外部成功待收片，自动收片尚待接入，不宣称已可审。所有操作通过MCP，Agent不直接POST /prompt绕过平台。
 
 监测由 Worker 程序持续进行，无需另开大模型监控 Agent。节点步数只来自收到的真实 WebSocket 事件，外部队列不代表本项目任务；不推算整体百分比/ETA，不因没有事件判失败或补发生成。
 
@@ -57,6 +57,6 @@ description: 在用户指定的本地创作目录，通过 ComfyPilot MCP 管理
 - 用户明确要求停止平台时调用 `stop_service`，携带引用则只控制绑定实例；不要顺带停止 ComfyUI 或全局中断外部任务。
 - 重启后调用 `connect_service` 取得新引用，再读业务与监测状态；普通重连不等于恢复派发。`connection_invalidated` 不允许把旧引用自动绑定新实例。
 - 用户要求恢复派发时调用 `resume_dispatch`；它仅解除 manual_pause，不能清除 review_hold 或 reconciliation_required。保留并解释这些限制，不能编辑数据库绕过。
-- 对旧提交意图、未知外部任务或不明回执保留原身份与证据，不自动重发、清空队列或换地址认领。当前收片/对账尚未实现，明确说明缺项。
+- 对旧提交意图、未知外部任务或不明回执保留原身份与证据，不自动重发、清空队列或换地址认领。Worker 已实现原目标 history→queue→history 对账；不明状态占用额度并阻止新生成。收片尚未接入，不能把外部成功当作可审版本。
 
 完成后告诉用户项目目录、面板 URL、连接/目标状态、已做操作及仍需补齐的能力。没有用户停止指示时，让独立平台继续运行。

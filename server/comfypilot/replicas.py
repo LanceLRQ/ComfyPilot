@@ -236,7 +236,12 @@ async def materialize_run(project: Project, run_id: str) -> dict:
         plan = db.execute("SELECT * FROM execution_plans WHERE id=?", (run["plan_id"],)).fetchone()
     document = json.loads(run["document"])
     if "materialized" in document:
-        return document["materialized"]
+        final = document["materialized"]
+        for replica in final["inputs"]:
+            await put_input(
+                project, final["target_snapshot"]["target"], replica["asset_id"], run_id
+            )
+        return final
     if run["status"] != "queued" or run["intent"] or plan["status"] != "active":
         raise ProjectError("plan_unavailable", "仅准备当前有效方案的未提交运行。")
     targets = json.loads(plan["targets"])

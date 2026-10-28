@@ -5,12 +5,21 @@ from contextlib import contextmanager
 from threading import Thread
 
 import uvicorn
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse, Response
 
 
 @contextmanager
 def comfy_server(
-    *, events=True, delay=0, partial=False, progress=True, disconnect=False, busy=True, catalog=None
+    *,
+    events=True,
+    delay=0,
+    partial=False,
+    progress=True,
+    disconnect=False,
+    busy=True,
+    catalog=None,
+    generation=None,
 ):
     app = FastAPI()
     calls = []
@@ -51,12 +60,35 @@ def comfy_server(
 
     @app.get("/queue")
     async def queue():
+        if generation is not None:
+            return {"queue_running": generation.get("running", []), "queue_pending": []}
         return {
             "queue_running": [[0, "external-prompt", {"private": "do-not-export"}, {}, []]]
             if busy
             else [],
             "queue_pending": [],
         }
+
+    @app.post("/prompt")
+    async def prompt(request: Request):
+        body = await request.json()
+        generation.setdefault("posts", []).append(body)
+        if generation.get("reject"):
+            return JSONResponse({"error": {"type": "prompt_invalid"}, "node_errors": {}}, 400)
+        row = [0, "fixture-prompt", body["prompt"], body["extra_data"], ["1"]]
+        generation["running"] = [row]
+        generation["prompt"] = row
+        if generation.get("lost_receipt"):
+            return Response("{", media_type="application/json")
+        return {"prompt_id": "fixture-prompt", "number": 0, "node_errors": {}}
+
+    @app.get("/history")
+    @app.get("/history/{prompt_id}")
+    async def history(prompt_id: str | None = None):
+        generation["history_reads"] = generation.get("history_reads", 0) + 1
+        if generation.get("race") and generation["history_reads"] == 1:
+            return {}
+        return generation.get("history", {})
 
     @app.get("/object_info")
     async def nodes():

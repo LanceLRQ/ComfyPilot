@@ -19,11 +19,11 @@
 | stop_plan | plan_id | 取消未提交运行，保留在途意图 |
 | pause_dispatch / resume_dispatch | 命令与业务修订 | 修改 manual_pause，其他限制保留 |
 
-每个 step 明确 recipe_id、recipe_hash、inputs、parameters、target_id 和 required_nodes。recipe_hash 从已刷新配方记录读取，覆盖图、说明及关联资源，不是单独 API 文件哈希。inputs 是输入槽位到媒体 SHA-256 的映射；不要把可变文件路径当版本证据。所有输入和参数必须完整提供。required_nodes 必须与 API 图节点类型集合一致。
+每个 step 明确 recipe_id、recipe_hash、inputs、asset_ids、parameters、target_id 和 required_nodes。recipe_hash 从已刷新配方记录读取，覆盖图、说明及关联资源，不是单独 API 文件哈希。inputs 是输入槽位到媒体 SHA-256 的映射，asset_ids 是同槽位到导入/提取后独立素材ID的映射；两者必须完整对应且类型、哈希一致；不要把可变文件路径当版本证据。所有输入和参数必须完整提供。required_nodes 必须与 API 图节点类型集合一致。
 
 mandate 保存用户的 instruction 和 source，以及 allowed_recipes（配方 ID→哈希）、allowed_targets、allowed_inputs（输入 ID→哈希）、allowed_parameters（参数名→允许值列表）、max_submissions 和 stop_conditions。参数当前只支持明确候选值枚举，保留原值；不支持范围表达式。即使没有可调参数，也显式传 parameters 与 allowed_parameters 的空对象。
 
-stop_conditions 支持 on_failure（失败后停止）与 after_limit；最大次数始终是硬限制。方案最多 100 个步骤，最大提交次数 100；次数来自用户指示，不因软件允许 100 就自行提高。M2/2.1 已验证配方声明与冻结图模板；M2/2.3 提供本地媒体准备，但最终 ComfyUI 输入上传与图物化尚未实现。旧版方案没有资源快照时需重建，已有 intent 保留。
+stop_conditions 支持 on_failure（失败后停止）与 after_limit；最大次数始终是硬限制。方案最多 100 个步骤，最大提交次数 100；次数来自用户指示，不因软件允许 100 就自行提高。本机适配器已接通最终图与提交：显式配置 assets.mode=local 和 input_dir/output_dir，Worker 按 input_order 准备真实素材、Run专属前缀，并持久保存最终图、输入/目标/依赖及意图后提交一次。旧版方案没有资源快照时需重建，已有 intent 保留。
 
 ## 本地媒体准备
 
@@ -40,4 +40,4 @@ stop_conditions 支持 on_failure（失败后停止）与 after_limit；最大�
 - 项目总生成并发为 1；内部预留意图会再检查所有暂停原因、次数、目标身份、fresh 的生成能力/节点和外部空队列。监测过期时等待或显式探测，不当作正常。
 - 目标改址或停用后旧方案不会偷偷换端。保存新方案前明确目标；旧在途记录始终保持原快照。
 - 内部 intent、额度和事件同事务。返回 reused 的原 intent 是待对账证据，不是再次发送许可。不明提交占用一次额度。
-- 当前没有实际生成消费、回执对账、收片、清理、审片结论或事件流工具；不要调用设计文档中的未来工具，也不要编辑 SQLite 完成这些操作。
+- 实际生成消费与回执对账已接入。意图已存在时仅核对原目标、原prompt_id；丢失prompt_id时按项目/Run/意图标记匹配，不明状态保留并阻止新提交。只有history明确success且completed才进入collecting，节点完成不算成功。当前没有自动收片、清理、审片结论或事件流工具；不要调用设计文档中的未来工具，也不要编辑 SQLite 完成这些操作。
