@@ -62,6 +62,12 @@ class MediaSpec(BaseModel):
     duration_seconds: float | None = Field(default=None, gt=0)
 
 
+class TimeMapping(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    input_slot: Name
+    mode: Literal["identity"]
+
+
 class Output(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     node_id: Text
@@ -69,6 +75,7 @@ class Output(BaseModel):
     kind: Literal["video", "image"]
     filename_prefix: Binding | None = None
     spec: MediaSpec | None = None
+    time_mapping: TimeMapping | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class ModelDependency(BaseModel):
@@ -178,6 +185,12 @@ def validate_graph(recipe: Recipe, value: dict) -> dict:
     if any(output.node_id not in graph for output in recipe.outputs.values()):
         raise ValueError("输出规则引用了不存在的节点")
     for output in recipe.outputs.values():
+        if output.time_mapping and (
+            output.kind != "video"
+            or output.time_mapping.input_slot not in recipe.inputs
+            or recipe.inputs[output.time_mapping.input_slot].kind != "video"
+        ):
+            raise ValueError("时间映射必须引用配方的视频输入与视频输出")
         binding = output.filename_prefix
         if binding:
             pair = (binding.node_id, binding.input_name)

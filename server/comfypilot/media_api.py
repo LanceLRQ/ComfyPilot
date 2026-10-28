@@ -27,6 +27,7 @@ from comfypilot.media import (
 from comfypilot.media_tools import require_tools
 from comfypilot.project import Project, ProjectError
 from comfypilot.replicas import list_replicas
+from comfypilot.review import get_review_version
 from comfypilot.runtime import RuntimeRecord
 from comfypilot.settings import get_project
 
@@ -46,6 +47,10 @@ def install_media_routes(app: FastAPI, project: Project, runtime: RuntimeRecord)
     @app.get("/api/versions")
     def versions():
         return reply(list_versions(project))
+
+    @app.get("/api/versions/{version_id}")
+    def review_version(version_id: UUID):
+        return reply(get_review_version(project, str(version_id)))
 
     @app.get("/api/versions/{version_id}/content")
     def version_content(version_id: UUID, variant: Literal["original", "preview"] = "preview"):

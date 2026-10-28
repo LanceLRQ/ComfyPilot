@@ -13,10 +13,11 @@ from test_generation import generation_workspace, media_files, tick
 __all__ = ["generation_workspace", "media_files"]
 
 
-def completed(workspace):
+def completed(workspace, run_id=None):
     project, _, state, _ = workspace
     tick(workspace)
-    run = get_execution(project)["runs"][0]
+    runs = get_execution(project)["runs"]
+    run = next(item for item in runs if item["id"] == run_id) if run_id else runs[0]
     target = get_project(project)["config"]["targets"][0]
     relative = run["document"]["materialized"]["outputs"]["main"]["prefix"] + ".mp4"
     output = Path(target["assets"]["output_dir"]) / relative

@@ -30,6 +30,13 @@ export const workspaceSchema = z.object({
           frame_count: z.number().nullable(),
         }),
         checks: z.object({ status: z.string() }),
+        created_at: z.string(),
+        source: z.object({
+          graph_hash: z.string(),
+          prompt_id: z.string(),
+          inputs: z.array(z.object({ slot: z.string(), asset_id: z.string() })),
+          target_snapshot: z.object({ target: z.object({ id: z.string(), name: z.string() }) }),
+        }),
       }),
     ),
   }),
