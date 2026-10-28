@@ -7,7 +7,7 @@ def build_context(project: Project, state: dict, monitoring: dict) -> dict:
     configuration = get_project(project)
     resources = get_resources(project)
     return {
-        "project": project.summary(),
+        "project": {**project.summary(), "name": configuration["config"]["name"]},
         "revision": state["revision"],
         "event_cursor": state["event_cursor"],
         "tasks": state["tasks"],

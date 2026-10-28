@@ -21,12 +21,16 @@ const detailSchema = z.object({
 });
 export type Version = z.infer<typeof versionSchema>;
 
-function clipKey(version: Version) {
-  const segment =
+function clipSegment(version: Version) {
+  return (
     version.source.segment_id ??
     version.source.inputs.find((item) => item.slot === "video")?.asset_id ??
-    version.run_id;
-  return `${version.task_id}:${segment}:${version.slot}`;
+    version.run_id
+  );
+}
+
+function clipKey(version: Version) {
+  return `${version.task_id}:${clipSegment(version)}:${version.slot}`;
 }
 
 function ReviewPlayer({
@@ -230,14 +234,15 @@ export function Versions() {
       {!selected && <p>等待首个可审版本。</p>}
       <div className="review-desk">
         <nav className="review-clips" aria-label="审片片段">
-          {Array.from(groups, ([key, items], index) => (
+          {Array.from(groups, ([key, items]) => (
             <button
               type="button"
               key={key}
+              title={clipSegment(items[0])}
               aria-pressed={key === activeClip}
               onClick={() => setClip(key)}
             >
-              片段 {index + 1}
+              片段 {clipSegment(items[0]).slice(0, 8)}
               <small>
                 {items.length} 个候选 · {items[0].slot}
               </small>

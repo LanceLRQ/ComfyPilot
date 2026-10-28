@@ -4,7 +4,7 @@
 
 产品目标：用户在 Claude Code、Codex 等工具里提需求，Agent 按 Skill 在当前项目目录启动 ComfyPilot，通过 MCP 管理任务与执行。用户打开浏览器看进度、审片和提出修改意见。生成可以交给本机或远程 ComfyUI。
 
-当前已实现 M1/1.1–1.6 和 M2 第一条视频链路：项目服务、默认待机的 stdio MCP、显式连接、多目标配置、资源快照、素材导入与显式片段、H3 配方、持久提交/对账、[自动收片和基础预览](docs/collection.md)、幂等恢复及远程素材桥接。[真实链路验收](docs/h3-validation.md)已覆盖 macOS 远程桥接与 Linux 同机目录模式，包含重启接续和工具缺失后的恢复。M1/1.7 双宿主完整矩阵仍保留；M3 审片协作与完整监控、M4 清理交付继续开发。文档更新于 2026-10-28（Asia/Shanghai）。
+当前已实现 M1/1.1–1.6 和 M2 第一条视频链路：项目服务、默认待机的 stdio MCP、显式连接、多目标配置、资源快照、素材导入与显式片段、H3 配方、持久提交/对账、[自动收片和基础预览](docs/collection.md)、幂等恢复及远程素材桥接。[真实链路验收](docs/h3-validation.md)已覆盖 macOS 远程桥接与 Linux 同机目录模式，包含重启接续和工具缺失后的恢复。M3 已接入逐段审片、截图圈选、返工与明确采用、共享监控、MCP 控制和 Agent 新会话接续；[M3 联合验收](docs/m3-validation.md)区分已验证场景与保留项。M1/1.7 双宿主完整矩阵、M2/2.2 安装回退等实测项仍保留；M4 清理交付继续开发。文档更新于 2026-10-28（Asia/Shanghai）。
 
 ## 本地开发与运行
 
@@ -41,7 +41,7 @@ Worker 单独退出后，仍运行的 API 会以 1 秒检查间隔恢复它；�
 uv run --locked comfypilot resume-dispatch --project-root /absolute/path/to/project
 ```
 
-重启后仍须显式恢复派发；Worker 单独重启保留开关状态。指示范围、次数限制与串行门禁已实现；解除开关后 Worker 可消费已生效方案的入队运行，生成前仍须通过全部门禁；自动收片与基础预览已接入，完整审片仍在开发。详见[生成提交与对账](docs/generation.md)。
+重启后仍须显式恢复派发；Worker 单独重启保留开关状态。指示范围、次数限制与串行门禁已实现；解除开关后 Worker 可消费已生效方案的入队运行，生成前仍须通过全部门禁；自动收片、逐段审片和监控协作已接入。详见[生成提交与对账](docs/generation.md)。
 
 CLI 必须显式传入绝对项目目录，不会猜测当前项目。`init` 可重复执行，保留已有项目标识、配置和数据；其他命令只加载已经初始化的项目。默认仅监听 `127.0.0.1`，无需登录；本阶段尚不支持局域网监听。进程管理使用 POSIX 文件锁和会话机制，macOS/Linux 的安装包平台启停已实测，双宿主完整矩阵仍在 M1/1.7，暂不支持 Windows。
 
@@ -93,7 +93,7 @@ CLI 必须显式传入绝对项目目录，不会猜测当前项目。`init` 可
 
 连接引用只存在于当前 MCP 进程中，允许同时连接多个项目。同项目的多个 MCP 进程复用平台实例，各自管理引用；退出宿主、终止 MCP 或断开连接后，后台 API/Worker 继续运行。
 
-配置工具还包括 `get_project`、`update_project`、`refresh_project`、`list_targets`、`update_target` 和 `resolve_target`，均要求显式项目与连接引用。写入传 `expected_revision`，配置冲突返回 `conflict`；网页保留当前草稿，可自行合并或明确重新读取。监测工具包括 `probe_target`、`get_target_status` 和 `get_monitor_status`。执行工具包括 `get_execution`、`create_task`、`create_plan`、`activate_plan`、`execute_plan`、`stop_plan`、`pause_dispatch` 和 `resume_dispatch`，资源工具包括 `list_resources`、`refresh_resources`、`get_resource_file`、`preflight_recipe`，当前共 28 个工具。实际生成提交、事件流与收片后续接入。
+配置工具还包括 `get_project`、`update_project`、`refresh_project`、`list_targets`、`update_target` 和 `resolve_target`，均要求显式项目与连接引用。写入传 `expected_revision`，配置冲突返回 `conflict`；网页保留当前草稿，可自行合并或明确重新读取。监测工具包括 `probe_target`、`get_target_status` 和 `get_monitor_status`。执行工具包括 `get_execution`、`create_task`、`create_plan`、`activate_plan`、`execute_plan`、`stop_plan`、`pause_dispatch` 和 `resume_dispatch`，资源工具包括 `list_resources`、`refresh_resources`、`get_resource_file`、`preflight_recipe`，另提供逐段审片、反馈/采用、运行/收片查询、方案暂停/恢复、指定未提交步骤取消、`get_context`、`read_events` 和 `wait_for_events`，当前共 53 个工具。生成、对账、收片与事件流已接入，完整操作见随包 Skill 和[审片工作台](docs/review-workbench.md)。
 
 ## Agent Skill
 
@@ -154,6 +154,7 @@ make package
 | [模块与资源](docs/resources.md) | 声明格式、显式刷新、覆盖映射、目标预检与冻结快照 |
 | [H3 首发配方与环境验收](docs/h3-recipe.md) | 输入输出、固定版本/模型、安装验证/回退、真实环境保留项 |
 | [H3 真实链路验收](docs/h3-validation.md) | 两种部署、重启接续、收片恢复、技术检查及证据复核 |
+| [M3 审片协作联合验收](docs/m3-validation.md) | 真实 GPU 并行审阅、离线反馈、Agent 返工、用户采用和监控恢复 |
 | [素材导入与显式片段](docs/media-assets.md) | 网页/MCP 操作、任务状态、限额、时间映射和失败处理 |
 | [Agent 接入与 M1 验收](docs/agent-setup.md) | Skill 安装、双宿主注册、实际操作与待实测矩阵 |
 | [产品需求](docs/product-requirements.md) | 已确认约束、协作流程、模块划分与产品规则 |
@@ -161,7 +162,7 @@ make package
 | [架构设计](docs/architecture.md) | 项目目录、进程生命周期、模块契约、执行恢复与素材清理 |
 | [技术调研与分期](docs/research-and-roadmap.md) | 官方方案参考、简化画布设计、分期与仍需实测的问题 |
 
-范围以首版范围与验收为准。实现状态和实测范围以上方说明及验收记录为准；M3 审片协作、完整监控面板和 M4 清理交付仍按里程碑推进。
+范围以首版范围与验收为准。实现状态和实测范围以上方说明及验收记录为准；M3 联合验收的独立执行端实测保留，M4 清理交付仍按里程碑推进。
 
 ## 第一版
 

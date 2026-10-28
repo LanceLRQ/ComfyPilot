@@ -1,6 +1,7 @@
 import asyncio
 import json
 import time
+from urllib.request import urlopen
 from uuid import uuid4
 
 import httpx2
@@ -12,6 +13,20 @@ from test_review import review_workspace
 from test_service import running_service
 
 __all__ = ["generation_workspace", "media_files", "review_workspace"]
+
+
+def test_context_and_overview_show_effective_project_name(tmp_path):
+    from comfypilot.project import read_project
+    from comfypilot.settings import get_project, update_project
+
+    with running_service(tmp_path / "renamed") as (address, _, _):
+        project = read_project(tmp_path / "renamed")
+        current = get_project(project)
+        update_project(project, current["revision"], {**current["config"], "name": "审片项目"})
+        with urlopen(address + "/api/project") as response:
+            assert json.load(response)["name"] == "审片项目"
+        with urlopen(address + "/api/context") as response:
+            assert json.load(response)["data"]["project"]["name"] == "审片项目"
 
 
 def test_fresh_stdio_session_recovers_facts_budget_and_feedback(review_workspace, tmp_path):
