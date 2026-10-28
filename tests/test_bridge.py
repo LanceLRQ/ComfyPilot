@@ -46,7 +46,7 @@ def test_extension_registers_routes_through_comfy_entrypoint(tmp_path, monkeypat
     module = importlib.util.module_from_spec(spec)
     monkeypatch.setitem(sys.modules, "bridge_entrypoint", module)
     spec.loader.exec_module(module)
-    assert len(registry) == 5
+    assert len(registry) == 6
     app = web.Application()
     app.add_routes(registry)
 
@@ -233,3 +233,43 @@ def test_missing_bridge_is_explicitly_unsupported_without_upload_fallback(tmp_pa
         capabilities = asyncio.run(probe_asset_capabilities(project, target))
         assert capabilities["media_transfer"]["status"] == "unsupported"
         assert all(method == "GET" for method, _ in calls)
+
+
+def test_bridge_delete_is_fingerprinted_replayable_and_serial_with_reupload(tmp_path):
+    async def scenario():
+        for role in ("input", "output"):
+            (tmp_path / role).mkdir()
+        app = web.Application()
+        app.add_routes(routes(tmp_path / "input", tmp_path / "output"))
+        project, asset = str(uuid4()), str(uuid4())
+        body = b"owned input"
+        async with TestServer(app) as server, httpx2.AsyncClient() as client:
+            base = str(server.make_url(f"/comfypilot/v1/projects/{project}"))
+            url = base + f"/input/{asset}.mp4"
+            headers = {"X-Content-SHA256": sha256(body).hexdigest()}
+            record = (await client.put(url, content=body, headers=headers)).json()
+            path = tmp_path / "input" / record["relative_path"]
+            request = {
+                "operation_id": str(uuid4()),
+                "role": "input",
+                "path": record["relative_path"],
+                "fingerprint": record["fingerprint"],
+            }
+            response = await client.request("DELETE", base + "/delete", json=request)
+            assert response.status_code == 200, response.text
+            receipt = response.json()
+            assert receipt["status"] == "deleted" and not path.exists()
+            created = await client.put(url, content=body, headers=headers)
+            assert created.status_code == 200, created.text
+            assert path.is_file()
+            replay = await client.request("DELETE", base + "/delete", json=request)
+            assert replay.json() == receipt and path.is_file()
+            request["operation_id"] = str(uuid4())
+            changed = await client.request("DELETE", base + "/delete", json=request)
+            assert changed.status_code == 412 and path.is_file()
+            request.update(operation_id=str(uuid4()), path=f"ComfyPilot/{uuid4()}/other.mp4")
+            assert (
+                await client.request("DELETE", base + "/delete", json=request)
+            ).status_code == 400
+
+    asyncio.run(scenario())

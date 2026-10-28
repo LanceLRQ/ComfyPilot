@@ -21,6 +21,16 @@ const responseSchema = z.object({
   data: planSchema.optional(),
   error: z.object({ message: z.string() }).optional(),
 });
+const receiptSchema = z.object({
+  data: z
+    .object({
+      command_id: z.string(),
+      deleted_bytes: z.number(),
+      items: z.array(z.object({ replica_id: z.string(), status: z.string() })),
+    })
+    .optional(),
+  error: z.object({ message: z.string() }).optional(),
+});
 const reasons: Record<string, string> = {
   active_run: "运行仍在进行",
   plan_reference: "仍被待执行方案使用",
@@ -44,6 +54,8 @@ export function Maintenance() {
   const [preview, setPreview] = useState<z.infer<typeof planSchema> | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [command, setCommand] = useState<string | null>(null);
+  const [receipt, setReceipt] = useState<z.infer<typeof receiptSchema>["data"]>();
   async function inspect(save: boolean) {
     if (!snapshot || !target) return;
     setBusy(true);
@@ -64,10 +76,36 @@ export function Maintenance() {
       if (!response.ok || !result.data)
         throw new Error(result.error?.message ?? "无法取得清理预览。");
       setPreview(result.data);
+      setCommand(null);
+      setReceipt(undefined);
       if (!save) setSelected([]);
       setMessage(save ? "已保存清理预览，尚未删除文件。" : "盘点完成，文件保持原样。");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "清理预览暂不可用。");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function execute(retry = false) {
+    if (!snapshot || !preview?.id) return;
+    const id = retry || !command ? crypto.randomUUID() : command;
+    setCommand(id);
+    setBusy(true);
+    try {
+      const response = await fetch("/api/cleanup/execute", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-ComfyPilot-Instance": snapshot.instance_id,
+        },
+        body: JSON.stringify({ plan_id: preview.id, command_id: id }),
+      });
+      const result = receiptSchema.parse(await response.json());
+      if (!response.ok || !result.data) throw new Error(result.error?.message ?? "清理执行失败。");
+      setReceipt(result.data);
+      setMessage("清理回执已保存。原件与审片记录保留。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "请保留命令 ID 后重试获取回执。");
     } finally {
       setBusy(false);
     }
@@ -91,6 +129,7 @@ export function Maintenance() {
             setTarget(event.target.value);
             setPreview(null);
             setSelected([]);
+            setReceipt(undefined);
           }}
         >
           <option value="">请选择执行端</option>
@@ -106,7 +145,10 @@ export function Maintenance() {
         <input
           aria-label="清理范围说明"
           value={instruction}
-          onChange={(event) => setInstruction(event.target.value)}
+          onChange={(event) => {
+            setInstruction(event.target.value);
+            setPreview((previous) => (previous ? { ...previous, id: undefined } : previous));
+          }}
           placeholder="填写用途，实际范围以下方勾选项为准"
         />
       </label>
@@ -125,8 +167,44 @@ export function Maintenance() {
         >
           保存清理预览
         </button>
+        <button
+          type="button"
+          disabled={busy || stale || !preview?.id || !!receipt}
+          onClick={() => void execute()}
+        >
+          执行此清单
+        </button>
+        {receipt?.items.some((item) => item.status === "failed") && (
+          <button
+            type="button"
+            disabled={busy || stale || !preview?.id}
+            onClick={() => void execute(true)}
+          >
+            按原清单重试
+          </button>
+        )}
       </div>
       {message && <p role="status">{message}</p>}
+      {command && (
+        <p>
+          清理命令：<code>{command}</code>
+        </p>
+      )}
+      {receipt && (
+        <div>
+          <p>
+            已删除文件大小估算：{receipt.deleted_bytes.toLocaleString()}{" "}
+            字节；磁盘空闲变化见逐项持久回执。
+          </p>
+          <ul>
+            {receipt.items.map((item) => (
+              <li key={item.replica_id}>
+                <code>{item.replica_id}</code> · {item.status}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {preview && (
         <div>
           <p>

@@ -384,6 +384,11 @@ def apply_command(project: Project, command: AnyCommand) -> dict:
                 feedback_ids=command.feedback_ids,
             )
             check_scope(plan)
+            from comfypilot.cleanup import check_cleanup_claims
+
+            check_cleanup_claims(
+                db, {value for step in plan.steps for value in step.inputs.values()}
+            )
             if not db.execute(
                 "SELECT id FROM execution_tasks WHERE id=?", (command.task_id,)
             ).fetchone():
@@ -746,6 +751,9 @@ def reserve_submission(
         targets = json.loads(row["targets"])
         check_targets(project, targets)
         step = plan.steps[run["action_index"]]
+        from comfypilot.cleanup import check_cleanup_claims
+
+        check_cleanup_claims(db, set(step.inputs.values()))
         snapshot = get_target_status(project, instance_id, worker_pid, step.target_id)
         if (
             snapshot["connection"]["availability"] != "fresh"

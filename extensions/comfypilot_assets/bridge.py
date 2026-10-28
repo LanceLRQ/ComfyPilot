@@ -18,6 +18,7 @@ PREFIX = "/comfypilot/v1"
 def create_routes(input_dir, output_dir) -> web.RouteTableDef:
     roots = {"input": Path(input_dir).resolve(), "output": Path(output_dir).resolve()}
     routes = web.RouteTableDef()
+    locks = {}
 
     def managed_path(project, role, relative):
         parts = PurePosixPath(relative).parts
@@ -90,15 +91,20 @@ def create_routes(input_dir, output_dir) -> web.RouteTableDef:
             previous = db.execute(
                 "SELECT document FROM replicas WHERE role=? AND path=?", (role, relative)
             ).fetchone()
-            if previous and json.loads(previous[0])["fingerprint"] != record["fingerprint"]:
+            if (
+                previous
+                and not json.loads(previous[0]).get("deleted")
+                and json.loads(previous[0])["fingerprint"] != record["fingerprint"]
+            ):
                 raise web.HTTPConflict(text="asset_changed")
             db.execute(
-                "INSERT OR IGNORE INTO replicas VALUES (?,?,?)",
+                "INSERT INTO replicas VALUES (?,?,?) ON CONFLICT(role,path) "
+                "DO UPDATE SET document=excluded.document",
                 (role, relative, json.dumps(record)),
             )
         return record
 
-    async def handler(request):
+    async def handler(request, deletion=None):
         temporary = None
         try:
             if request.path == PREFIX + "/capabilities":
@@ -106,13 +112,66 @@ def create_routes(input_dir, output_dir) -> web.RouteTableDef:
                     {
                         "protocol": 1,
                         "namespace": "ComfyPilot",
-                        "features": ["upload", "download", "stat", "known"],
+                        "features": ["upload", "download", "stat", "known", "delete"],
                         "max_bytes": LIMIT,
                     }
                 )
             project = request.match_info["project"]
             if str(UUID(project)) != project:
                 raise ValueError("project_uuid_required")
+            if request.method == "DELETE":
+                body = deletion
+                operation = body["operation_id"]
+                if str(UUID(operation)) != operation:
+                    raise ValueError("operation_uuid_required")
+                role, relative = body["role"], body["path"]
+                path = managed_path(project, role, relative)
+                database = ledger(project)
+                if not database.is_file():
+                    raise web.HTTPConflict(text="unknown_file")
+                request_hash = sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
+                with closing(sqlite3.connect(database)) as db, db:
+                    db.execute(
+                        "CREATE TABLE IF NOT EXISTS deletions (id TEXT PRIMARY KEY, "
+                        "request_hash TEXT NOT NULL, document TEXT NOT NULL)"
+                    )
+                    prior = db.execute(
+                        "SELECT request_hash,document FROM deletions WHERE id=?", (operation,)
+                    ).fetchone()
+                    if prior:
+                        if prior[0] != request_hash:
+                            raise web.HTTPConflict(text="operation_mismatch")
+                        return web.json_response(json.loads(prior[1]))
+                    row = db.execute(
+                        "SELECT document FROM replicas WHERE role=? AND path=?", (role, relative)
+                    ).fetchone()
+                    if not row:
+                        raise web.HTTPConflict(text="unknown_file")
+                    known = json.loads(row[0])
+                    if known["fingerprint"] != body["fingerprint"]:
+                        raise web.HTTPPreconditionFailed(text="asset_changed")
+                    if path.exists():
+                        current = await proof(path)
+                        if current["fingerprint"] != body["fingerprint"]:
+                            raise web.HTTPPreconditionFailed(text="asset_changed")
+                        before = shutil.disk_usage(path.parent).free
+                        path.unlink()
+                        result = {
+                            "status": "deleted",
+                            "free_change_bytes": shutil.disk_usage(path.parent).free - before,
+                        }
+                    else:
+                        result = {"status": "already_missing", "free_change_bytes": None}
+                    known["deleted"] = True
+                    db.execute(
+                        "UPDATE replicas SET document=? WHERE role=? AND path=?",
+                        (json.dumps(known), role, relative),
+                    )
+                    db.execute(
+                        "INSERT INTO deletions VALUES (?,?,?)",
+                        (operation, request_hash, json.dumps(result)),
+                    )
+                return web.json_response(result)
             if request.method == "PUT":
                 filename = request.match_info["filename"]
                 if not re.fullmatch(
@@ -201,9 +260,42 @@ def create_routes(input_dir, output_dir) -> web.RouteTableDef:
             if temporary is not None:
                 temporary.unlink(missing_ok=True)
 
-    routes.get(PREFIX + "/capabilities")(handler)
+    async def serialized(request):
+        project = request.match_info.get("project", "")
+        body = None
+        if request.method == "DELETE":
+            raw = await request.content.read(16385)
+            try:
+                body = json.loads(raw)
+                if (
+                    len(raw) > 16384
+                    or not isinstance(body, dict)
+                    or set(body) != {"operation_id", "role", "path", "fingerprint"}
+                ):
+                    raise ValueError
+                if not all(
+                    isinstance(body[key], str) for key in ("operation_id", "role", "path")
+                ) or not isinstance(body["fingerprint"], dict):
+                    raise ValueError
+            except (ValueError, TypeError):
+                raise web.HTTPBadRequest(text="invalid_delete_request") from None
+            role, relative = body["role"], body["path"]
+        elif request.method == "PUT":
+            role, relative = "input", f"ComfyPilot/{project}/{request.match_info['filename']}"
+        elif request.path.rsplit("/", 1)[1] in {"stat", "download"}:
+            role = (
+                request.query.get("role", "output") if request.path.endswith("/stat") else "output"
+            )
+            relative = request.query.get("path", "")
+        else:
+            return await handler(request, body)
+        async with locks.setdefault((project, role, relative), asyncio.Lock()):
+            return await handler(request, body)
+
+    routes.get(PREFIX + "/capabilities")(serialized)
     base = PREFIX + "/projects/{project}"
-    routes.put(base + "/input/{filename}")(handler)
+    routes.put(base + "/input/{filename}")(serialized)
+    routes.delete(base + "/delete")(serialized)
     for suffix in ("stat", "download", "known"):
-        routes.get(base + "/" + suffix)(handler)
+        routes.get(base + "/" + suffix)(serialized)
     return routes

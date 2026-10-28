@@ -156,3 +156,176 @@ def test_stdio_preview_matches_web_and_rejects_unknown_origins(generation_worksp
                 assert plan["id"] and plan["estimated_bytes"] == 0
 
         asyncio.run(exercise())
+
+
+def ready_cleanup(workspace):
+    from comfypilot.cleanup import PrepareCleanup, prepare_cleanup
+
+    project = workspace[0]
+    _, path, version = collected(workspace)
+    command(
+        project,
+        "record_user_decision",
+        version_id=version["id"],
+        decision="adopt",
+        user_statement="仅采用合成测试结果，用于验证清理保护",
+    )
+    replica = next(x for x in list_replicas(project)["replicas"] if x["role"] == "output")
+    plan = asyncio.run(
+        prepare_cleanup(
+            project,
+            PrepareCleanup(
+                target_id="render",
+                replica_ids=[replica["id"]],
+                user_instruction="仅删除该测试输出副本",
+            ),
+        )
+    )
+    return plan, path, version
+
+
+def execute_cleanup_for(project, plan_id, command_id=None):
+    from comfypilot.cleanup import ExecuteCleanup, execute_cleanup
+
+    return asyncio.run(
+        execute_cleanup(
+            project, ExecuteCleanup(plan_id=plan_id, command_id=command_id or str(uuid4()))
+        )
+    )
+
+
+def test_cleanup_unlinks_only_replica_and_old_receipt_cannot_delete_replacement(
+    generation_workspace,
+):
+    project = generation_workspace[0]
+    plan, path, version = ready_cleanup(generation_workspace)
+    original = version_path(project, version["id"], "original").read_bytes()
+    cid = str(uuid4())
+    result = execute_cleanup_for(project, plan["id"], cid)
+    assert result["items"][0]["status"] == "deleted"
+    assert result["deleted_bytes"] > 0 and not path.exists()
+    assert version_path(project, version["id"], "original").read_bytes() == original
+    path.write_bytes(b"new owner at same name")
+    assert execute_cleanup_for(project, plan["id"], cid) == result
+    assert path.read_bytes() == b"new owner at same name"
+    retry = execute_cleanup_for(project, plan["id"])
+    assert retry["items"][0]["status"] == "changed"
+    assert path.read_bytes() == b"new owner at same name"
+
+
+def test_new_feedback_after_preview_protects_remote_copy(generation_workspace):
+    project = generation_workspace[0]
+    plan, path, version = ready_cleanup(generation_workspace)
+    command(
+        project,
+        "save_feedback",
+        version_id=version["id"],
+        kind="needs_changes",
+        text="清理预览之后新增的测试修改意见",
+    )
+    result = execute_cleanup_for(project, plan["id"])
+    assert result["items"][0]["status"] == "protected" and path.exists()
+
+
+def test_deleting_claim_blocks_new_plan_and_partial_failure_can_retry(
+    generation_workspace, monkeypatch
+):
+    from comfypilot import cleanup
+    from comfypilot.project import ProjectError
+
+    project = generation_workspace[0]
+    plan, path, _ = ready_cleanup(generation_workspace)
+    original = cleanup.unlink_replica
+    active = get_execution(project)["plans"][0]["document"]
+
+    async def failing(project, replica, operation_id):
+        body = {k: active[k] for k in ("task_id", "steps", "mandate")}
+        with pytest.raises(ProjectError) as error:
+            command(project, "create_plan", **body)
+        assert error.value.code == "cleanup_in_progress"
+        raise OSError("simulated disk error")
+
+    monkeypatch.setattr(cleanup, "unlink_replica", failing)
+    failed = execute_cleanup_for(project, plan["id"])
+    assert failed["items"][0]["status"] == "failed" and path.exists()
+    monkeypatch.setattr(cleanup, "unlink_replica", original)
+    done = execute_cleanup_for(project, plan["id"])
+    assert done["items"][0]["status"] == "deleted" and not path.exists()
+    missing = execute_cleanup_for(project, plan["id"])
+    assert missing["items"][0]["status"] == "already_missing"
+
+
+def test_cleaned_input_can_upload_again_without_old_plan_deleting_it(generation_workspace):
+    from comfypilot.cleanup import PrepareCleanup, prepare_cleanup
+    from comfypilot.replicas import local_path, put_input
+
+    project = generation_workspace[0]
+    run_id, _, _ = collected(generation_workspace)
+    command(project, "stop_plan", plan_id=get_execution(project)["plans"][0]["id"])
+    replica = next(x for x in list_replicas(project)["replicas"] if x["role"] == "input")
+    plan = asyncio.run(
+        prepare_cleanup(
+            project,
+            PrepareCleanup(
+                target_id="render", replica_ids=[replica["id"]], user_instruction="测试输入副本重传"
+            ),
+        )
+    )
+    result = execute_cleanup_for(project, plan["id"])
+    assert result["items"][0]["status"] == "deleted"
+    uploaded = asyncio.run(
+        put_input(project, replica["target_snapshot"], replica["asset_id"], run_id)
+    )
+    assert uploaded["fingerprint"] != replica["fingerprint"]
+    assert execute_cleanup_for(project, plan["id"])["items"][0]["status"] == "changed"
+    assert local_path(
+        replica["target_snapshot"],
+        str(project.identity.project_id),
+        "input",
+        replica["relative_path"],
+    ).is_file()
+
+
+def test_stdio_executes_fixed_cleanup_and_returns_same_receipt(generation_workspace, tmp_path):
+    import httpx2
+    from test_mcp_bridge import bridge, call
+    from test_service import running_service
+
+    project = generation_workspace[0]
+    plan, path, version = ready_cleanup(generation_workspace)
+    command(project, "pause_dispatch")
+    with running_service(project.root) as (address, _, _):
+
+        async def exercise():
+            async with bridge(tmp_path) as client:
+                connected = await call(client, "connect_service", project.root)
+                cid = str(uuid4())
+                result = await call(
+                    client,
+                    "execute_cleanup",
+                    project.root,
+                    connection_ref=connected["connection_ref"],
+                    plan_id=plan["id"],
+                    command_id=cid,
+                )
+                assert result["items"][0]["status"] == "deleted", result
+                repeated = await call(
+                    client,
+                    "execute_cleanup",
+                    project.root,
+                    connection_ref=connected["connection_ref"],
+                    plan_id=plan["id"],
+                    command_id=cid,
+                )
+                assert repeated == result
+                history = await call(
+                    client, "list_cleanup", project.root, connection_ref=connected["connection_ref"]
+                )
+                assert history["receipts"] == [result]
+                with httpx2.Client() as http:
+                    assert http.get(address + "/api/cleanup").json()["data"] == history
+                assert (
+                    not path.exists() and version_path(project, version["id"], "original").is_file()
+                )
+
+        asyncio.run(exercise())

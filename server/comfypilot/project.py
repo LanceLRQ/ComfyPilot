@@ -211,7 +211,7 @@ def migrate_database(project: Project) -> None:
         db.execute("PRAGMA journal_mode=WAL")
         db.execute("BEGIN IMMEDIATE")
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 13:
+        if version > 14:
             raise ProjectError("unsupported_schema", "数据库格式比当前程序更新，请使用对应版本。")
         db.execute(
             "CREATE TABLE IF NOT EXISTS project "
@@ -324,6 +324,12 @@ def migrate_database(project: Project) -> None:
             initialize_cleanup_schema(db)
             db.execute("PRAGMA user_version=13")
 
+        if version < 14:
+            from comfypilot.cleanup import initialize_cleanup_execution_schema
+
+            initialize_cleanup_execution_schema(db)
+            db.execute("PRAGMA user_version=14")
+
 
 def read_dispatch(project: Project) -> dict[str, bool | str]:
     with closing(sqlite3.connect(project.database)) as db:
@@ -365,7 +371,7 @@ def read_project(root: Path) -> Project:
     identity = ProjectIdentity.model_validate_json((state / "project.json").read_text("utf-8"))
     with closing(sqlite3.connect((state / "state.sqlite").as_uri() + "?mode=ro", uri=True)) as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 13:
+        if version > 14:
             raise ProjectError("unsupported_schema", "数据库格式比当前程序更新，请使用对应版本。")
         if version >= 3:
             row = db.execute(

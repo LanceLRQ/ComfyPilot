@@ -142,6 +142,11 @@ def list_replicas(project: Project) -> dict:
 
 def save_replica(project: Project, replica: dict, owner: str) -> None:
     with closing(sqlite3.connect(project.database)) as db, db:
+        db.execute("BEGIN IMMEDIATE")
+        if db.execute(
+            "SELECT 1 FROM cleanup_claims WHERE replica_id=?", (replica["id"],)
+        ).fetchone():
+            raise ProjectError("cleanup_in_progress", "副本正在清理，不能增加引用。")
         db.execute(
             "INSERT INTO asset_replicas VALUES (?,?,?,?,?) "
             "ON CONFLICT(id) DO UPDATE SET document=excluded.document",
@@ -169,7 +174,8 @@ async def put_input(project: Project, target: dict, asset_id: str, owner: str) -
             "WHERE target_key=? AND role='input' AND relative_path=?",
             (key, relative),
         ).fetchone()
-    if row:
+    reusable_id = json.loads(row[0])["id"] if row else str(uuid4())
+    if row and json.loads(row[0]).get("cleanup_state") != "deleted":
         replica = json.loads(row[0])
         if (await inspect_replica(project, target, "input", relative))["fingerprint"] != replica[
             "fingerprint"
@@ -189,7 +195,7 @@ async def put_input(project: Project, target: dict, asset_id: str, owner: str) -
         if proof["sha256"] != asset["content_hash"] or proof["size"] != asset["size"]:
             raise ProjectError("asset_mismatch", "上传副本与授权素材哈希/大小不一致。")
         replica = {
-            "id": str(uuid4()),
+            "id": reusable_id,
             "project_id": str(project.identity.project_id),
             "target_key": key,
             "target_snapshot": target,
@@ -225,7 +231,7 @@ async def put_input(project: Project, target: dict, asset_id: str, owner: str) -
         # 使用硬链接以不覆盖方式就位，两个文件处于同一目标目录。
         destination.hardlink_to(temporary)
         replica = {
-            "id": str(uuid4()),
+            "id": reusable_id,
             "project_id": str(project.identity.project_id),
             "target_key": key,
             "target_snapshot": target,

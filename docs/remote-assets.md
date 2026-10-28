@@ -6,14 +6,14 @@
 
 在平台环境运行 `comfypilot bridge-path`，取得随 wheel 交付的完整 `comfypilot_assets` 目录。该命令只读，不初始化项目、不联网、不导入扩展代码。将此目录复制到用户已指定的 ComfyUI `custom_nodes/` 下。只有用户提供的终端/SSH/容器管理通道才能安装，HTTP 可达不构成主机管理权限。
 
-扩展只依赖 ComfyUI 已有的 Python、aiohttp 和标准库，无新增模型或节点依赖。先核对目标地址与目录、当前队列和启动方式；已有同名目录先比较并保留其修改。保存安装文件哈希，在队列空闲时按该环境的原有方式重启 ComfyUI，访问 `/comfypilot/v1/capabilities`，应返回 protocol=1、namespace=ComfyPilot，以及 upload/download/stat/known。再在项目目标中设置：
+扩展只依赖 ComfyUI 已有的 Python、aiohttp 和标准库，无新增模型或节点依赖。先核对目标地址与目录、当前队列和启动方式；已有同名目录先比较并保留其修改。保存安装文件哈希，在队列空闲时按该环境的原有方式重启 ComfyUI，访问 `/comfypilot/v1/capabilities`，应返回 protocol=1、namespace=ComfyPilot，以及 upload/download/stat/known/delete。旧桥接没有 delete 时仍可传输，清理需升级。再在项目目标中设置：
 
 ```yaml
 assets:
   mode: bridge
 ```
 
-用 `probe_target` 核对执行能力与素材传输能力。运行新建独立测试项目的上传、指纹、下载检查后再生成。回退时先等待本项目及外部任务结束，将本次安装目录移到 custom_nodes 外的备份位置，再按原方式重启；素材命名空间与已有模型/节点保持独立。平台不暴露安装、shell、重启或删除远端文件的 MCP 工具。
+用 `probe_target` 核对执行能力与素材传输能力。运行新建独立测试项目的上传、指纹、下载检查后再生成。回退时先等待本项目及外部任务结束，将本次安装目录移到 custom_nodes 外的备份位置，再按原方式重启；素材命名空间与已有模型/节点保持独立。平台不暴露安装、shell 或重启 MCP 工具；清理须先生成固定清单，再通过 execute_cleanup 执行，见[素材维护](asset-cleanup.md)。
 
 ## 受限接口
 
@@ -24,8 +24,9 @@ assets:
 | GET .../projects/{project_uuid}/stat?role=input\|output&path=... | 指定项目命名空间内的大小、哈希和文件指纹 |
 | GET .../projects/{project_uuid}/download?path=... | 仅output；必须带上一次stat的X-ComfyPilot-Fingerprint |
 | GET .../projects/{project_uuid}/known | 最近1000条已记录副本，不扫描未知文件 |
+| DELETE .../projects/{project_uuid}/delete | 台账内固定项目/路径/指纹与幂等 operation_id，物理删除该副本 |
 
-根目录由 ComfyUI 的 folder_paths 提供。所有素材路径限于 `input/ComfyPilot/{project_uuid}/` 或 `output/ComfyPilot/{project_uuid}/`；平台进一步要求输出属于原 Run 的前缀与 history 声明。扩展拒绝绝对路径、`..`、跨项目路径与符号链接，不提供任意路径读取、shell或删除。已知副本台账在对应input项目子目录内，记录指纹，变化时拒绝覆盖；cleanup_eligible始终false，清理由M4单独实现。
+根目录由 ComfyUI 的 folder_paths 提供。所有素材路径限于 `input/ComfyPilot/{project_uuid}/` 或 `output/ComfyPilot/{project_uuid}/`；平台进一步要求输出属于原 Run 的前缀与 history 声明。扩展拒绝绝对路径、`..`、跨项目路径与符号链接，不提供任意路径读取或 shell。已知副本台账在对应 input 项目子目录内，记录指纹，变化时拒绝覆盖。同一素材串行协调上传、读取与删除；业务引用和本地原件由平台在执行前复核，桥接本身不推断可清理状态。
 
 上传及下载按1MiB分块，单文件服务端上限64GiB，实际输入仍受项目import_limits限制。大小和SHA-256必须与项目素材相符；复制前后复核源指纹。下载带指纹条件，传输后再次stat核对；改变的输出不能覆盖旧版本。元数据响应限制4MiB，能力探测2秒，传输整体超时300秒、空闲读取30秒；重试规则沿用[收片检查点](collection.md)，不承诺字节续传。
 

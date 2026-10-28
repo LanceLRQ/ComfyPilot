@@ -11,7 +11,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import CallToolResult, ListToolsResult, TextContent, Tool, ToolAnnotations
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from comfypilot.cleanup import CleanupScope, PrepareCleanup
+from comfypilot.cleanup import CleanupScope, ExecuteCleanup, PrepareCleanup
 from comfypilot.events import EventsRequest, WaitEventsRequest
 from comfypilot.execution import (
     ActivatePlan,
@@ -68,6 +68,10 @@ class ConnectionArguments(ProjectArguments):
 
 
 class StorageArguments(ConnectionArguments, CleanupScope):
+    pass
+
+
+class ExecuteCleanupArguments(ConnectionArguments, ExecuteCleanup):
     pass
 
 
@@ -218,6 +222,8 @@ class ApplicationReply(BaseModel):
 
 
 PROJECT_API = {
+    "execute_cleanup": ("POST", "/api/cleanup/execute"),
+    "list_cleanup": ("GET", "/api/cleanup"),
     "inspect_storage": ("POST", "/api/cleanup/inspect"),
     "prepare_cleanup": ("POST", "/api/cleanup/prepare"),
     "get_context": ("GET", "/api/context"),
@@ -276,6 +282,13 @@ PROJECT_API = {
 
 # 仅定义静态协议元数据；不得在此探测项目、服务或 ComfyUI。
 TOOL_DEFINITIONS = {
+    "execute_cleanup": (
+        ExecuteCleanupArguments,
+        "按固定清单复核引用和指纹后物理删除副本；同命令返回原回执。",
+        False,
+        True,
+    ),
+    "list_cleanup": (ConnectionArguments, "读取最近清理计划和逐项执行记录。", True, True),
     "inspect_storage": (
         StorageArguments,
         "只盘点指定目标本项目登记副本、占用与引用保护；不删除。",
