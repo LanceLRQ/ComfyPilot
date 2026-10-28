@@ -2,9 +2,10 @@ import asyncio
 import errno
 import json
 import math
+import re
 import sqlite3
 from contextlib import closing
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from fractions import Fraction
 from pathlib import Path
 from uuid import uuid4
@@ -41,11 +42,14 @@ def list_versions(project: Project) -> dict:
             "collections": [
                 {
                     "run_id": row[0],
-                    **json.loads(row[1]).get("collection", {"phase": "waiting_output"}),
+                    **json.loads(row[1]).get(
+                        "collection",
+                        {"phase": "failed" if row[2] == "failed" else "waiting_output"},
+                    ),
                 }
                 for row in db.execute(
-                    "SELECT id,document FROM execution_runs "
-                    "WHERE status='collecting' ORDER BY rowid LIMIT 50"
+                    "SELECT id,document,status FROM execution_runs "
+                    "WHERE status IN ('collecting','failed') ORDER BY rowid LIMIT 50"
                 )
             ],
         }
@@ -72,7 +76,7 @@ def version_path(project: Project, version_id: str, variant: str) -> Path:
     return path
 
 
-async def collect_run(project: Project, run_id: str) -> None:
+async def collect_run(project: Project, run_id: str, *, now: datetime | None = None) -> None:
     run = next(item for item in get_execution(project)["runs"] if item["id"] == run_id)
     if run["status"] != "collecting" or run["document"].get("collection", {}).get("phase") in {
         "failed",
@@ -80,14 +84,32 @@ async def collect_run(project: Project, run_id: str) -> None:
     }:
         return
     document = run["document"]
+    now = now or datetime.now(UTC)
+    prior = document.get("collection", {})
+    if prior.get("next_retry_at") and datetime.fromisoformat(prior["next_retry_at"]) > now:
+        return
     checkpoint = {**document.get("collection", {}), "phase": "waiting_output", "error": None}
+    checkpoint["attempts"] = checkpoint.get("attempts", 0) + 1
+    checkpoint["next_retry_at"] = None
 
     def phase(name, **fields):
         checkpoint.update(phase=name, **fields)
-        save_run(project, run_id, "collecting", {"collection": checkpoint})
+        save_run(
+            project,
+            run_id,
+            "failed" if name == "failed" else "collecting",
+            {"collection": checkpoint},
+        )
 
     temporary = None
     try:
+        if token := checkpoint.get("staging_token"):
+            if not re.fullmatch(r"[a-f0-9]{32}\.(part|mp4)", token):
+                raise ProjectError("media_path_invalid", "暂存检查点路径无效。")
+            abandoned = media_directory(project, "staging") / token
+            if abandoned.is_symlink():
+                raise ProjectError("media_path_invalid", "暂存检查点被链接替换。")
+            abandoned.unlink(missing_ok=True)
         phase("waiting_output")
         success = document.get("external_success")
         if not success:
@@ -121,6 +143,7 @@ async def collect_run(project: Project, run_id: str) -> None:
                 replica["relative_path"],
             )
             temporary = media_directory(project, "staging") / (uuid4().hex + ".part")
+            phase("transferring", staging_token=temporary.name)
             with source.open("rb") as incoming, temporary.open("xb") as outgoing:
                 while chunk := incoming.read(CHUNK_BYTES):
                     check_space(temporary.parent, len(chunk))
@@ -169,6 +192,7 @@ async def collect_run(project: Project, run_id: str) -> None:
             ):
                 phase("proxy")
                 temporary = media_directory(project, "staging") / (uuid4().hex + ".mp4")
+                phase("proxy", staging_token=temporary.name)
                 tools = require_tools()
                 await media_command(
                     [
@@ -277,8 +301,17 @@ async def collect_run(project: Project, run_id: str) -> None:
                 else "output_unavailable"
             )
         )
+        transient = code in {"output_unavailable", "output_missing", "bridge_unavailable"}
+        retrying = transient and checkpoint["attempts"] < 4
         phase(
-            "failed" if code in {"media_invalid", "media_spec_mismatch"} else "blocked",
+            "failed"
+            if code in {"media_invalid", "media_spec_mismatch"}
+            else "retry_wait"
+            if retrying
+            else "blocked",
+            next_retry_at=(now + timedelta(seconds=2 ** checkpoint["attempts"])).isoformat()
+            if retrying
+            else None,
             error={
                 "code": code,
                 "message": str(error)

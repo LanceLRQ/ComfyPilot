@@ -2,7 +2,7 @@
 
 ## 三种修订与命令回执
 
-配置写入采用 `get_project.revision`；资源刷新采用 `list_resources.revision`（初始 0）；业务命令采用 `get_execution.revision`。不能混用。资源内容无变化时刷新不增加修订。业务命令包括 create_task、create_plan、activate_plan、execute_plan、stop_plan、pause_dispatch 和 resume_dispatch。
+配置写入采用 `get_project.revision`；资源刷新采用 `list_resources.revision`（初始 0）；业务命令采用 `get_execution.revision`。不能混用。资源内容无变化时刷新不增加修订。业务命令包括 create_task、create_plan、activate_plan、execute_plan、stop_plan、pause_dispatch、resume_dispatch 和 resume_collection。
 
 每次新的业务操作生成 UUID 字符串作为 command_id，传 expected_revision；回执包含 command_id、revision、event_id 和 result。重复原操作重用同一个 ID 与原参数，取回原回执；同 ID 换请求返回 command_mismatch。网络超时不证明操作未执行，先查状态或按原 ID 重读回执，不换新 ID 重复创建。新命令冲突时保留草稿，读取状态并重新确认其仍符合用户意图。
 
@@ -17,6 +17,7 @@
 | activate_plan | plan_id | 草稿显式生效，取消旧方案无 intent 的 queued 运行 |
 | execute_plan | plan_id、action_indices | 幂等 Run ID；索引从 0 开始 |
 | stop_plan | plan_id | 取消未提交运行，保留在途意图 |
+| resume_collection | run_id、命令与业务修订 | 仅恢复已确认外部成功的blocked收片，原Run/原额度；failed不可恢复 |
 | pause_dispatch / resume_dispatch | 命令与业务修订 | 修改 manual_pause，其他限制保留 |
 
 每个 step 明确 recipe_id、recipe_hash、inputs、asset_ids、parameters、target_id 和 required_nodes。recipe_hash 从已刷新配方记录读取，覆盖图、说明及关联资源，不是单独 API 文件哈希。inputs 是输入槽位到媒体 SHA-256 的映射，asset_ids 是同槽位到导入/提取后独立素材ID的映射；两者必须完整对应且类型、哈希一致；不要把可变文件路径当版本证据。所有输入和参数必须完整提供。required_nodes 必须与 API 图节点类型集合一致。
@@ -41,3 +42,5 @@ stop_conditions 支持 on_failure（失败后停止）与 after_limit；最大�
 - 目标改址或停用后旧方案不会偷偷换端。保存新方案前明确目标；旧在途记录始终保持原快照。
 - 内部 intent、额度和事件同事务。返回 reused 的原 intent 是待对账证据，不是再次发送许可。不明提交占用一次额度。
 - 实际生成消费与回执对账已接入。意图已存在时仅核对原目标、原prompt_id；丢失prompt_id时按项目/Run/意图标记匹配，不明状态保留并阻止新提交。只有history明确success且completed才进入collecting，节点完成不算成功。后台已自动收片，list_versions 返回当前收片阶段、字节/错误及已完整解码并通过配方规格检查的ready版本。非H.264/MP4视频会有独立检查的播放代理；原片和代理不能混淆。不同Run即使字节相同也是独立版本，不合并来源。当前没有清理、审片结论或事件流工具；不要调用设计文档中的未来工具，也不要编辑 SQLite 完成这些操作。
+
+收片 checkpoint 保存阶段、已传字节、输出指纹、暂存token、尝试次数与下次时间。临时读取错误最多3次额外重试，耗尽后blocked；缺工具/空间直接blocked；媒体损坏或规格不符使Run.failed。按既有用户指示修复环境后使用resume_collection，首次恢复使用新的UUID command_id；同一次resume_collection请求回执丢失时才复用这次恢复的ID。原execute_plan及先前恢复轮次的command_id均不能拿来做新恢复，否则会command_mismatch或只返回旧回执。沿用的是run_id，不用execute_plan重跑。部分文件会从头重传，非通用字节续传；同名文件变化仍阻塞，不能借恢复覆盖旧指纹。

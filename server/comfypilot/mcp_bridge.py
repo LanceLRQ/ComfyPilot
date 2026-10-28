@@ -17,6 +17,7 @@ from comfypilot.execution import (
     CreateTask,
     ExecutePlan,
     PauseDispatch,
+    ResumeCollection,
     ResumeDispatch,
     StopPlan,
 )
@@ -136,6 +137,10 @@ class ResumeArguments(ConnectionArguments, ResumeDispatch):
     pass
 
 
+class ResumeCollectionArguments(ConnectionArguments, ResumeCollection):
+    pass
+
+
 class ToolError(BaseModel):
     code: str
     message: str
@@ -176,6 +181,7 @@ PROJECT_API = {
             "stop_plan",
             "pause_dispatch",
             "resume_dispatch",
+            "resume_collection",
         )
     },
     "get_execution": ("GET", "/api/execution"),
@@ -246,6 +252,12 @@ TOOL_DEFINITIONS = {
     "preflight_recipe": (
         PreflightArguments,
         "保存指定配方与目标的标准 schema 预检，不提交生成，不代表实测通过。",
+        False,
+        True,
+    ),
+    "resume_collection": (
+        ResumeCollectionArguments,
+        "幂等恢复原Run的阻塞收片，不重新生成。",
         False,
         True,
     ),

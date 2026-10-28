@@ -44,6 +44,7 @@ export function Versions() {
     proxy: "制作播放代理",
     registering: "登记版本",
     blocked: "已阻塞",
+    retry_wait: "等待退避重试",
     failed: "检查失败",
   };
   useEffect(() => {

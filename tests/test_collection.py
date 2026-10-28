@@ -102,7 +102,7 @@ def test_unverified_media_never_becomes_reviewable(generation_workspace, defect)
     asyncio.run(collect_run(project, run_id))
     assert list_versions(project)["versions"] == []
     phase = get_execution(project)["runs"][0]["document"]["collection"]["phase"]
-    assert phase in {"blocked", "failed"}
+    assert phase in {"blocked", "failed", "retry_wait"}
 
 
 def test_collection_requires_a_known_version_id(generation_workspace):

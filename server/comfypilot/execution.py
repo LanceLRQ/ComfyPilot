@@ -91,8 +91,20 @@ class ResumeDispatch(Command):
     action: Literal["resume_dispatch"] = "resume_dispatch"
 
 
+class ResumeCollection(Command):
+    action: Literal["resume_collection"] = "resume_collection"
+    run_id: Identifier
+
+
 AnyCommand = (
-    CreateTask | CreatePlan | ActivatePlan | ExecutePlan | StopPlan | PauseDispatch | ResumeDispatch
+    CreateTask
+    | CreatePlan
+    | ActivatePlan
+    | ExecutePlan
+    | StopPlan
+    | PauseDispatch
+    | ResumeDispatch
+    | ResumeCollection
 )
 COMMAND_SCHEMA = TypeAdapter(Annotated[AnyCommand, Field(discriminator="action")])
 
@@ -362,6 +374,41 @@ def apply_command(project: Project, command: AnyCommand) -> dict:
                     "plan_id": command.plan_id,
                     "run_ids": [existing[index] for index in indices],
                 }
+        elif isinstance(command, ResumeCollection):
+            run = db.execute(
+                "SELECT status,document FROM execution_runs WHERE id=?", (command.run_id,)
+            ).fetchone()
+            if not run:
+                raise ProjectError("run_unavailable", "运行不存在。")
+            document = json.loads(run["document"])
+            checkpoint = document.get("collection", {})
+            if (
+                run["status"] != "collecting"
+                or not document.get("external_success")
+                or checkpoint.get("phase") != "blocked"
+            ):
+                raise ProjectError(
+                    "collection_not_resumable",
+                    "仅可恢复已有外部成功且被阻塞的收片；技术失败不可绕过。",
+                )
+            checkpoint.update(
+                phase="waiting_output",
+                attempts=0,
+                next_retry_at=None,
+                error=None,
+                recoveries=checkpoint.get("recoveries", 0) + 1,
+            )
+            document["collection"] = checkpoint
+            db.execute(
+                "UPDATE execution_runs SET document=? WHERE id=?",
+                (json.dumps(document), command.run_id),
+            )
+            object_id = command.run_id
+            result = {
+                "run_id": command.run_id,
+                "phase": "waiting_output",
+                "recoveries": checkpoint["recoveries"],
+            }
         else:
             paused = isinstance(command, PauseDispatch)
             db.execute(

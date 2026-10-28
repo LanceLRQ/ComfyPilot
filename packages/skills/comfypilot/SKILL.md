@@ -56,6 +56,7 @@ Worker 已接通真实生成提交与原目标对账。用户已有明确执行�
 - 用户只要求断开连接时调用 `disconnect_service`；这不会暂停或停止平台。宿主或 MCP 退出后，后台平台继续运行。
 - 用户明确要求停止平台时调用 `stop_service`，携带引用则只控制绑定实例；不要顺带停止 ComfyUI 或全局中断外部任务。
 - 重启后调用 `connect_service` 取得新引用，再读业务与监测状态；普通重连不等于恢复派发。`connection_invalidated` 不允许把旧引用自动绑定新实例。
+- 收片临时错误最多3次额外退避重试，耗尽或缺空间/工具时blocked。修复原因后，可按用户既有指示调用 `resume_collection(run_id, command_id, expected_revision)`，首次恢复生成新的UUID作为该次resume_collection的command_id；仅同一次恢复请求回执丢失时复用该恢复命令ID，绝不能使用execute_plan的ID或前一轮恢复ID。沿用的是run_id和成功证据，不重新生成或增加额度；保留指纹，变更输出仍阻塞，failed技术检查不能绕过。
 - 用户要求恢复派发时调用 `resume_dispatch`；它仅解除 manual_pause，不能清除 review_hold 或 reconciliation_required。保留并解释这些限制，不能编辑数据库绕过。
 - 对旧提交意图、未知外部任务或不明回执保留原身份与证据，不自动重发、清空队列或换地址认领。Worker 已实现原目标 history→queue→history 对账；不明状态占用额度并阻止新生成。后台会自动接续已保存成功的收片；不能把外部成功当作可审版本，等待 list_versions 的 ready 与检查通过。
 
