@@ -10,7 +10,9 @@ from uuid import uuid4
 import pytest
 from comfy_fixture import comfy_server
 from comfypilot.project import ExecutionTarget, ProjectError, initialize_project
+from comfypilot.resources import get_resources, refresh_resources
 from comfypilot.settings import get_project, update_project
+from resource_fixture import write_recipe
 
 
 @pytest.fixture
@@ -19,6 +21,8 @@ def workspace(tmp_path):
 
     with comfy_server(busy=False) as (address, calls, _):
         project = initialize_project(tmp_path)
+        write_recipe(tmp_path)
+        refresh_resources(project, 0)
         config = get_project(project)["config"]
         update_project(
             project,
@@ -54,37 +58,49 @@ def command(project, action, **fields):
     )
 
 
-def plan_body(task_id, *, count=2, limit=2):
+def plan_body(project, task_id, *, count=2, limit=2):
     return {
         "task_id": task_id,
         "steps": [
             {
                 "recipe_id": "swap",
-                "recipe_hash": "a" * 64,
+                "recipe_hash": get_resources(project)["recipes"][0]["hash"],
                 "inputs": {"video": "b" * 64},
-                "parameters": {"seed": index},
+                "parameters": {"seed": index, "prompt": ""},
                 "target_id": "render",
-                "required_nodes": ["KSampler"],
+                "required_nodes": ["FixtureRender"],
             }
             for index in range(count)
         ],
         "mandate": {
             "instruction": "用户允许制作这两个候选，失败停止",
             "source": "用户对话",
-            "allowed_recipes": {"swap": "a" * 64},
+            "allowed_recipes": {"swap": get_resources(project)["recipes"][0]["hash"]},
             "allowed_targets": ["render"],
             "allowed_inputs": {"video": "b" * 64},
-            "allowed_parameters": {"seed": list(range(count))},
+            "allowed_parameters": {"seed": list(range(count)), "prompt": [""]},
             "max_submissions": limit,
             "stop_conditions": ["on_failure", "after_limit"],
         },
     }
 
 
+def frozen_hash(project, run_id):
+    from comfypilot.execution import get_execution
+
+    return next(
+        run["document"]["resource_snapshot"]["graph_hash"]
+        for run in get_execution(project)["runs"]
+        if run["id"] == run_id
+    )
+
+
 def prepared(project, *, count=2, limit=2):
     task = command(project, "create_task", goal="人物替换", acceptance="人物一致，动作保留")
     plan = command(
-        project, "create_plan", **plan_body(task["result"]["task_id"], count=count, limit=limit)
+        project,
+        "create_plan",
+        **plan_body(project, task["result"]["task_id"], count=count, limit=limit),
     )
     command(project, "activate_plan", plan_id=plan["result"]["plan_id"])
     return task["result"]["task_id"], plan["result"]["plan_id"]
@@ -118,7 +134,7 @@ def test_scope_validation_and_missing_mandate_do_not_create_plans(workspace):
 
     project, _, _ = workspace
     task = command(project, "create_task", goal="换人", acceptance="保留动作")
-    body = plan_body(task["result"]["task_id"])
+    body = plan_body(project, task["result"]["task_id"])
     with pytest.raises(ValidationError):
         COMMAND_SCHEMA.validate_python(
             {
@@ -141,9 +157,9 @@ def test_prompt_values_are_saved_exactly_as_authorized(workspace):
 
     project, _, _ = workspace
     task = command(project, "create_task", goal="换人", acceptance="保留动作")
-    body = plan_body(task["result"]["task_id"])
+    body = plan_body(project, task["result"]["task_id"])
     body["steps"][0]["parameters"]["prompt"] = "  用户指定的提示词  "
-    body["mandate"]["allowed_parameters"]["prompt"] = ["  用户指定的提示词  "]
+    body["mandate"]["allowed_parameters"]["prompt"] = ["", "  用户指定的提示词  "]
     command(project, "create_plan", **body)
     assert (
         get_execution(project)["plans"][0]["document"]["steps"][0]["parameters"]["prompt"]
@@ -162,7 +178,7 @@ def test_enqueue_is_unique_and_limited_and_draft_does_not_replace_active_plan(wo
     with pytest.raises(ProjectError) as error:
         command(project, "execute_plan", plan_id=plan_id, action_indices=[2])
     assert error.value.code == "mandate_exceeded"
-    command(project, "create_plan", **plan_body(task_id))
+    command(project, "create_plan", **plan_body(project, task_id))
     state = get_execution(project)
     assert state["tasks"][0]["active_plan_id"] == plan_id
     assert all(run["status"] == "queued" for run in state["runs"])
@@ -179,7 +195,13 @@ def test_two_claims_serialize_and_intent_quota_event_are_atomic(workspace):
 
     def claim(run_id):
         try:
-            return reserve_submission(project, run_id, instance, os.getpid(), "c" * 64)
+            return reserve_submission(
+                project,
+                run_id,
+                instance,
+                os.getpid(),
+                frozen_hash(project, run_id),
+            )
         except ProjectError as error:
             return error.code
 
@@ -211,8 +233,15 @@ def test_activation_and_stop_cancel_only_unsubmitted_runs_and_preserve_intent(wo
     task_id, plan_id = prepared(project)
     queued = command(project, "execute_plan", plan_id=plan_id, action_indices=[0, 1])
     command(project, "resume_dispatch")
-    reserve_submission(project, queued["result"]["run_ids"][0], instance, os.getpid(), "c" * 64)
-    replacement = command(project, "create_plan", **plan_body(task_id))
+    run_id = queued["result"]["run_ids"][0]
+    reserve_submission(
+        project,
+        run_id,
+        instance,
+        os.getpid(),
+        frozen_hash(project, run_id),
+    )
+    replacement = command(project, "create_plan", **plan_body(project, task_id))
     command(project, "activate_plan", plan_id=replacement["result"]["plan_id"])
     state = get_execution(project)
     assert {run["status"] for run in state["runs"]} == {"dispatching", "cancelled"}
@@ -233,9 +262,16 @@ def test_resume_cannot_clear_other_dispatch_holds(workspace, reason):
     with sqlite3.connect(project.database) as db:
         db.execute(f"UPDATE execution_control SET {reason}=1")
     command(project, "resume_dispatch")
+    run_id = queued["result"]["run_ids"][0]
     assert get_execution(project)["dispatch"][reason] is True
     with pytest.raises(ProjectError) as error:
-        reserve_submission(project, queued["result"]["run_ids"][0], instance, os.getpid(), "c" * 64)
+        reserve_submission(
+            project,
+            run_id,
+            instance,
+            os.getpid(),
+            frozen_hash(project, run_id),
+        )
     assert error.value.code == "dispatch_paused"
 
 
@@ -246,18 +282,31 @@ def test_claim_rechecks_target_revision_capability_and_external_queue(workspace)
     _, plan_id = prepared(project)
     queued = command(project, "execute_plan", plan_id=plan_id, action_indices=[0])
     command(project, "resume_dispatch")
+    run_id = queued["result"]["run_ids"][0]
     with sqlite3.connect(project.database) as db:
         row = db.execute("SELECT document FROM status_samples WHERE kind='http'").fetchone()
         value = json.loads(row[0])
         value["metrics"]["queue_running"]["value"] = 1
         db.execute("UPDATE status_samples SET document=? WHERE kind='http'", (json.dumps(value),))
     with pytest.raises(ProjectError) as error:
-        reserve_submission(project, queued["result"]["run_ids"][0], instance, os.getpid(), "c" * 64)
+        reserve_submission(
+            project,
+            run_id,
+            instance,
+            os.getpid(),
+            frozen_hash(project, run_id),
+        )
     assert error.value.code == "external_queue_busy"
     config = get_project(project)["config"]
     update_project(project, 2, {**config, "targets": [{**config["targets"][0], "enabled": False}]})
     with pytest.raises(ProjectError) as error:
-        reserve_submission(project, queued["result"]["run_ids"][0], instance, os.getpid(), "c" * 64)
+        reserve_submission(
+            project,
+            run_id,
+            instance,
+            os.getpid(),
+            frozen_hash(project, run_id),
+        )
     assert error.value.code == "target_changed"
 
 
@@ -269,6 +318,7 @@ def test_missing_or_stale_capabilities_refuse_before_reserving_quota(workspace, 
     _, plan_id = prepared(project)
     queued = command(project, "execute_plan", plan_id=plan_id, action_indices=[0])
     command(project, "resume_dispatch")
+    run_id = queued["result"]["run_ids"][0]
     before = get_execution(project)["event_cursor"]
     with sqlite3.connect(project.database) as db:
         if missing == "nodes":
@@ -289,7 +339,7 @@ def test_missing_or_stale_capabilities_refuse_before_reserving_quota(workspace, 
             queued["result"]["run_ids"][0],
             instance,
             os.getpid() + (1 if missing == "worker" else 0),
-            "c" * 64,
+            frozen_hash(project, run_id),
         )
     assert error.value.code == "capability_unavailable"
     state = get_execution(project)
@@ -312,14 +362,32 @@ def test_failed_event_rolls_back_intent_and_quota_and_replay_does_not_consume_tw
             "WHEN NEW.action='submission_reserved' BEGIN SELECT RAISE(ABORT, 'fixture'); END"
         )
     with pytest.raises(sqlite3.IntegrityError):
-        reserve_submission(project, run_id, instance, os.getpid(), "c" * 64)
+        reserve_submission(
+            project,
+            run_id,
+            instance,
+            os.getpid(),
+            frozen_hash(project, run_id),
+        )
     state = get_execution(project)
     assert state["plans"][0]["used_submissions"] == 0
     assert state["runs"][0]["intent"] is None
     with sqlite3.connect(project.database) as db:
         db.execute("DROP TRIGGER reject_test_event")
-    first = reserve_submission(project, run_id, instance, os.getpid(), "c" * 64)
-    replay = reserve_submission(project, run_id, instance, os.getpid(), "c" * 64)
+    first = reserve_submission(
+        project,
+        run_id,
+        instance,
+        os.getpid(),
+        frozen_hash(project, run_id),
+    )
+    replay = reserve_submission(
+        project,
+        run_id,
+        instance,
+        os.getpid(),
+        frozen_hash(project, run_id),
+    )
     assert replay["intent"] == first["intent"]
     assert replay["reused"] is True
     assert get_execution(project)["plans"][0]["used_submissions"] == 1
@@ -341,7 +409,7 @@ def test_execution_schema_has_real_constraints_and_monitoring_does_not_advance_b
         before["event_cursor"],
     )
     with sqlite3.connect(project.database) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 5
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 6
         columns = {row[1] for row in db.execute("PRAGMA table_info(execution_runs)")}
         assert columns == {"id", "plan_id", "action_index", "status", "document", "intent"}
         indices = {row[1] for row in db.execute("PRAGMA index_list(execution_runs)")}
@@ -408,6 +476,19 @@ def test_real_stdio_and_http_share_command_receipts_and_control_boundary(workspa
 
             connection = await tool("connect_service")
             ref = {"connection_ref": connection["connection_ref"]}
+            resources = await tool("list_resources", **ref)
+            assert resources["revision"] == 1
+            refreshed = await tool("refresh_resources", **ref, expected_revision=1)
+            assert refreshed["hash"] == resources["hash"]
+            resource_hash = resources["recipes"][0]["files"]["project:modules/demo/canvas.json"]
+            original = await tool("get_resource_file", **ref, resource_hash=resource_hash)
+            assert json.loads(original["text"])["version"] == 0.4
+            await tool("probe_target", **ref, target_id="render")
+            report = await tool("preflight_recipe", **ref, recipe_id="swap", target_id="render")
+            assert report["status"] == "passed" and report["real_test"] == "not_run"
+            with urlopen(url + "/api/resources", timeout=3) as response:
+                http_resources = json.load(response)["data"]
+            assert http_resources == await tool("list_resources", **ref)
             state = await tool("get_execution", **ref)
             assert state["revision"] == 0
             created = await tool(
@@ -423,7 +504,7 @@ def test_real_stdio_and_http_share_command_receipts_and_control_boundary(workspa
                 **ref,
                 command_id=str(uuid4()),
                 expected_revision=1,
-                **plan_body(created["result"]["task_id"]),
+                **plan_body(project, created["result"]["task_id"]),
             )
             plan_id = plan["result"]["plan_id"]
             await tool(

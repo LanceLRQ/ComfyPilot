@@ -26,7 +26,14 @@ description: 在用户指定的本地创作目录，通过 ComfyPilot MCP 管理
 - 用户选择目标后用 `probe_target(target_id)` 验证标准接口与节点证据。`get_target_status` 读取快照；fresh、stale、unknown、unsupported 分别解释，零值和未知值不能混为一谈。
 - 可选凭据只放当前项目 `.comfypilot/secrets.local.yaml`，配置仅保存 `credential_ref`。按用户指定的认证方式管理本地文件，限制读取权限，不把秘密写入普通配置、对话摘要或版本库。
 - 连接平台、连接 ComfyUI 与安装节点/模型是不同能力。只有 HTTP 时不能声称有环境安装、通用视频传输或清理权限。列明缺少的节点/模型、安装说明或管理通道；未经用户要求不安装、启动或停止 ComfyUI。
-- 本机/远程只是位置标签，不能作为能力证据。项目中的 workflows/custom_nodes/modules 可以保留用户资源；当前 M1 尚无模块注册、实际资源校验或自动安装，不宣称“放入即已可执行”。
+- 本机/远程只是位置标签，不能作为能力证据。项目中的 workflows/custom_nodes/modules 保存工作流、模块声明、节点源码和说明；平台只读取数据，不导入或自动安装代码。
+
+## 发现资源与准备配方
+
+1. `list_resources` 读取有效资源修订；首次为 0，不隐式扫描。修改资源文件后调用 `refresh_resources(expected_revision)`。文件引用是项目根相对路径；同名冲突用配置 `resource_overrides` 显式选择来源后再刷新，失败时保留原快照。
+2. 用 `get_resource_file(resource_hash)` 查看快照原件和说明。画布不能直接执行；Recipe 必须独立提供 API 图、输入/参数绑定、输出规则与完整模块/节点声明。内置人物替换当前只有模块声明，真实配方仍待交付。
+3. 选择目标并 `probe_target` 后调用 `preflight_recipe(recipe_id, target_id)`。缺节点、未知、定义不匹配、标准预检通过分别处理。预检 15 秒内有效，过期重新探测；不能据此声称节点固定版本已验证、实际安装完成或真实生成通过。
+4. 创建方案时从有效资源快照取得 recipe_hash，完整提供所有输入与参数，required_nodes 对应实际 API 图。平台冻结参数化图模板、配方和关联文件哈希，刷新磁盘不会改写旧方案/Run。输入媒体上传与最终图物化尚未接入。
 
 ## 方案与工作状态
 

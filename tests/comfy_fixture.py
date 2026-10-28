@@ -61,7 +61,18 @@ def comfy_server(
     @app.get("/object_info")
     async def nodes():
         return {
-            "KSampler": {"input": {"required": {}}, "output": ["LATENT"], "category": "sampling"}
+            "FixtureRender": {
+                "input": {
+                    "required": {
+                        "video": ["STRING", {}],
+                        "seed": ["INT", {"min": 0, "max": 1000}],
+                        "prompt": ["STRING", {}],
+                    }
+                },
+                "output": ["IMAGE"],
+                "output_node": True,
+            },
+            "KSampler": {"input": {"required": {}}, "output": ["LATENT"], "category": "sampling"},
         }
 
     @app.websocket("/ws")

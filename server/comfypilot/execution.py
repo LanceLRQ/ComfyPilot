@@ -10,6 +10,8 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 from comfypilot.monitoring import get_target_status
 from comfypilot.project import Project, ProjectError, dispatch_state
+from comfypilot.resource_preflight import check_frozen_recipe
+from comfypilot.resources import freeze_recipe
 from comfypilot.settings import get_project, resolve_target
 
 Identifier = Annotated[str, Field(min_length=1, max_length=128, pattern=r"\S")]
@@ -136,7 +138,7 @@ def get_execution(project: Project) -> dict:
                 dict(row) for row in db.execute(f"SELECT * FROM execution_{name} ORDER BY rowid")
             ]
             for row in rows:
-                for key in ("document", "targets", "intent"):
+                for key in ("document", "targets", "intent", "resources"):
                     if row.get(key) is not None:
                         row[key] = json.loads(row[key])
             state[name] = rows
@@ -231,11 +233,29 @@ def apply_command(project: Project, command: AnyCommand) -> dict:
             targets = {
                 step.target_id: resolve_target(project, step.target_id) for step in plan.steps
             }
+            resources = {}
+            for index, step in enumerate(plan.steps):
+                frozen = freeze_recipe(
+                    project, step.recipe_id, step.recipe_hash, step.inputs, step.parameters
+                )
+                if set(step.required_nodes) != {
+                    node["class_type"] for node in frozen["graph"].values()
+                }:
+                    raise ProjectError(
+                        "recipe_binding_invalid", "所需节点必须与冻结 API 图完全一致。"
+                    )
+                resources[str(index)] = frozen
             object_id = str(uuid4())
             db.execute(
-                "INSERT INTO execution_plans(id,task_id,status,document,targets) "
-                "VALUES (?,?,'draft',?,?)",
-                (object_id, command.task_id, plan.model_dump_json(), json.dumps(targets)),
+                "INSERT INTO execution_plans(id,task_id,status,document,targets,resources) "
+                "VALUES (?,?,'draft',?,?,?)",
+                (
+                    object_id,
+                    command.task_id,
+                    plan.model_dump_json(),
+                    json.dumps(targets),
+                    json.dumps(resources),
+                ),
             )
             result = {"plan_id": object_id, "status": "draft"}
         elif isinstance(command, (ActivatePlan, StopPlan, ExecutePlan)):
@@ -290,6 +310,9 @@ def apply_command(project: Project, command: AnyCommand) -> dict:
                 targets = json.loads(row["targets"])
                 check_targets(project, targets)
                 indices = list(dict.fromkeys(command.action_indices))
+                resources = json.loads(row["resources"])
+                if any(str(index) not in resources for index in indices):
+                    raise ProjectError("resource_unavailable", "旧方案缺少冻结资源，请创建新方案。")
                 if any(index >= len(plan.steps) for index in indices):
                     raise ProjectError("mandate_exceeded", "动作索引超出已确定的方案。")
                 existing = {
@@ -317,6 +340,7 @@ def apply_command(project: Project, command: AnyCommand) -> dict:
                                     {
                                         "step": plan.steps[index].model_dump(),
                                         "target_snapshot": targets[plan.steps[index].target_id],
+                                        "resource_snapshot": resources[str(index)],
                                     }
                                 ),
                             ),
@@ -406,11 +430,20 @@ def reserve_submission(
                 raise ProjectError(
                     "external_queue_busy", "外部队列非空或未知，等待且不接管其他任务。"
                 )
+        frozen = json.loads(run["document"]).get("resource_snapshot")
+        if frozen is None or graph_hash != frozen["graph_hash"]:
+            raise ProjectError("resource_changed", "提交图哈希与运行冻结资源不一致。")
+        preflight = check_frozen_recipe(frozen, snapshot)
+        if preflight["status"] != "passed":
+            raise ProjectError(
+                "capability_unavailable", "冻结配方未通过当前目标的标准 schema 预检。"
+            )
         intent = {
             "client_id": str(uuid4()),
             "graph_hash": graph_hash,
             "created_at": datetime.now(UTC).isoformat(),
             "target_snapshot": targets[step.target_id],
+            "preflight": preflight,
         }
         db.execute(
             "UPDATE execution_runs SET status='dispatching',intent=? WHERE id=?",

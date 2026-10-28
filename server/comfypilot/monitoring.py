@@ -130,6 +130,8 @@ def get_target_status(
             result["node_count"] = len(data["node_classes"])
             result["node_classes"] = data["node_classes"]
             result["node_catalog_hash"] = data["hash"]
+            result["node_schemas"] = data.get("node_schemas", {})
+            result["node_catalog_expires_at"] = data.get("expires_at")
         else:
             result.update(data)
     clock = now or datetime.now(UTC)
@@ -233,12 +235,40 @@ class TargetMonitor:
         if "nodes" in documents:
             nodes = documents["nodes"]
             names = sorted(nodes) if isinstance(nodes, dict) else []
+            schemas = {}
+            if isinstance(nodes, dict):
+                for name, node in nodes.items():
+                    inputs = {}
+                    for key, declaration in {**node.input.optional, **node.input.required}.items():
+                        if not declaration or not isinstance(declaration[0], (str, list)):
+                            continue
+                        options = (
+                            declaration[1]
+                            if len(declaration) > 1 and isinstance(declaration[1], dict)
+                            else {}
+                        )
+                        inputs[key] = {
+                            "type": declaration[0],
+                            "required": key in node.input.required,
+                            **{
+                                field: options[field]
+                                for field in ("min", "max")
+                                if type(options.get(field)) in (int, float)
+                            },
+                        }
+                    schemas[name] = {
+                        "inputs": inputs,
+                        "outputs": node.output,
+                        "output_node": node.output_node,
+                    }
             self.catalog_fetched = True
             self.store(
                 "catalog",
                 {
                     "node_classes": names,
-                    "hash": sha256(json.dumps(names).encode()).hexdigest(),
+                    "hash": sha256(json.dumps(schemas, sort_keys=True).encode()).hexdigest(),
+                    "node_schemas": schemas,
+                    "expires_at": (datetime.now(UTC) + timedelta(seconds=15)).isoformat(),
                     "execute": {
                         "status": "available" if names else "unknown",
                         "source": source + "/object_info",

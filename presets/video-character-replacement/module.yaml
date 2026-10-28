@@ -1,0 +1,15 @@
+kind: module
+id: video-character-replacement
+name: 视频人物替换
+version: "0.1"
+description: 保留原视频动作与镜头，以人物参考素材替换目标人物。
+instructions: video-character-replacement/README.md
+inputs:
+  video: video
+  reference: image
+outputs:
+  main: video
+checks:
+  - 人物一致性、动作保留、镜头与音画连续性
+feedback:
+  - 按时间段反馈人物、动作与画面问题

@@ -388,6 +388,24 @@ footer {
   color: #efc7a5;
   font-size: 12px;
 }
+.resource-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  margin: 20px 0;
+}
+.resource-code {
+  max-height: 420px;
+  overflow: auto;
+  padding: 16px;
+  background: #f4f1ea;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.settings code {
+  overflow-wrap: anywhere;
+}
 @media (max-width: 800px) {
   .shell {
     padding: 0 24px;

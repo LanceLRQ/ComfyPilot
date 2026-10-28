@@ -12,6 +12,10 @@ from comfypilot.project import initialize_project, resolve_project_root
 from mcp import Client, StdioServerParameters
 
 TOOLS = {
+    "list_resources",
+    "refresh_resources",
+    "get_resource_file",
+    "preflight_recipe",
     "get_execution",
     "create_task",
     "create_plan",

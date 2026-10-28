@@ -38,10 +38,17 @@ class Queue(BaseModel):
     queue_pending: list | None = None
 
 
+class NodeInputs(BaseModel):
+    model_config = ConfigDict(extra="ignore", strict=True)
+    required: dict[str, list] = Field(default_factory=dict)
+    optional: dict[str, list] = Field(default_factory=dict)
+
+
 class NodeInfo(BaseModel):
     model_config = ConfigDict(extra="ignore", strict=True)
-    input: dict
-    output: list
+    input: NodeInputs
+    output: list[str]
+    output_node: bool | None = None
 
 
 class EventData(BaseModel):

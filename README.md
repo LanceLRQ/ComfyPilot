@@ -4,7 +4,7 @@
 
 产品目标：用户在 Claude Code、Codex 等工具里提需求，Agent 按 Skill 在当前项目目录启动 ComfyPilot，通过 MCP 管理任务与执行。用户打开浏览器看进度、审片和提出修改意见。生成可以交给本机或远程 ComfyUI。
 
-当前已实现 M1/1.1–1.6：项目服务、默认待机的 stdio MCP、显式连接，以及网页/MCP 共用的配置修订和多个执行端。已接入 ComfyUI 能力探测与基础状态快照；已交付 Agent Skill 与接入说明，M1/1.7 的实际双宿主/Linux 验收仍待补充；生成与视频审片尚未接入。文档更新于 2026-10-27（Asia/Shanghai）。
+当前已实现 M1/1.1–1.6：项目服务、默认待机的 stdio MCP、显式连接，以及网页/MCP 共用的配置修订和多个执行端。已接入 ComfyUI 能力探测与基础状态快照；已交付 Agent Skill 与接入说明，M1/1.7 的实际双宿主/Linux 验收仍待补充；生成与视频审片尚未接入。已实现 M2/2.1 的模块声明、资源显式刷新、目标标准预检和不可变方案/Run 资源快照。文档更新于 2026-10-28（Asia/Shanghai）。
 
 ## 本地开发与运行
 
@@ -93,7 +93,7 @@ CLI 必须显式传入绝对项目目录，不会猜测当前项目。`init` 可
 
 连接引用只存在于当前 MCP 进程中，允许同时连接多个项目。同项目的多个 MCP 进程复用平台实例，各自管理引用；退出宿主、终止 MCP 或断开连接后，后台 API/Worker 继续运行。
 
-配置工具还包括 `get_project`、`update_project`、`refresh_project`、`list_targets`、`update_target` 和 `resolve_target`，均要求显式项目与连接引用。写入传 `expected_revision`，配置冲突返回 `conflict`；网页保留当前草稿，可自行合并或明确重新读取。监测工具包括 `probe_target`、`get_target_status` 和 `get_monitor_status`。执行工具包括 `get_execution`、`create_task`、`create_plan`、`activate_plan`、`execute_plan`、`stop_plan`、`pause_dispatch` 和 `resume_dispatch`，当前共 24 个工具。实际生成提交、事件流与收片后续接入。
+配置工具还包括 `get_project`、`update_project`、`refresh_project`、`list_targets`、`update_target` 和 `resolve_target`，均要求显式项目与连接引用。写入传 `expected_revision`，配置冲突返回 `conflict`；网页保留当前草稿，可自行合并或明确重新读取。监测工具包括 `probe_target`、`get_target_status` 和 `get_monitor_status`。执行工具包括 `get_execution`、`create_task`、`create_plan`、`activate_plan`、`execute_plan`、`stop_plan`、`pause_dispatch` 和 `resume_dispatch`，资源工具包括 `list_resources`、`refresh_resources`、`get_resource_file`、`preflight_recipe`，当前共 28 个工具。实际生成提交、事件流与收片后续接入。
 
 ## Agent Skill
 
@@ -128,7 +128,7 @@ Worker 默认每 5 秒读取标准 `/system_stats`、`/queue`，节点清单只�
 
 SQLite 格式 5 保存任务、方案、Run、回执、事件与独立挂起原因。内部领取边界重新检查方案/指示、目标快照、最新能力与所需节点、外部空队列、所有暂停原因和项目总并发 1；额度预留、提交意图与事件同事务。旧意图仅返回 reused，不成为再次发送的许可。普通恢复只解除 manual_pause，保留 review_hold 与 reconciliation_required。CLI 恢复派发也记录命令回执。
 
-当前 Worker 只执行监测，队列不会自动发往 ComfyUI；配方/输入哈希目前由 Agent 提供，实际资源校验、生成提交、回执对账和收片在 M2 交付。不要把 queued 当作已经开始渲染，也不要绕过平台直接 POST /prompt。
+当前 Worker 只执行监测，队列不会自动发往 ComfyUI。新方案必须引用已刷新且声明完整的配方哈希，冻结参数化图模板、输入与关联资源；刷新不改旧 Run。输入媒体本体导入、最终图物化、生成提交、回执对账和收片由后续 M2 接入。资源契约、四个接口及状态说明见 [模块与资源](docs/resources.md)。不要把 queued 当作已经开始渲染，也不要绕过平台直接 POST /prompt。
 
 ## 检查与打包
 
@@ -145,13 +145,14 @@ make package
 
 | 文档 | 内容 |
 | --- | --- |
+| [模块与资源](docs/resources.md) | 声明格式、显式刷新、覆盖映射、目标预检与冻结快照 |
 | [Agent 接入与 M1 验收](docs/agent-setup.md) | Skill 安装、双宿主注册、实际操作与待实测矩阵 |
 | [产品需求](docs/product-requirements.md) | 已确认约束、协作流程、模块划分与产品规则 |
 | [首版范围与验收](docs/mvp-scope.md) | 第一版功能边界、40 条验收要求与开发顺序 |
 | [架构设计](docs/architecture.md) | 项目目录、进程生命周期、模块契约、执行恢复与素材清理 |
 | [技术调研与分期](docs/research-and-roadmap.md) | 官方方案参考、简化画布设计、分期与仍需实测的问题 |
 
-范围以首版范围与验收为准。除上方明确列出的 M1/1.1–1.6 能力外，文档中的目录、工具名和接口仍是设计约定，不代表已经实现。
+范围以首版范围与验收为准。除上方明确列出的 M1/1.1–1.6、Skill 和 M2/2.1 能力外，文档中的目录、工具名和接口仍是设计约定，不代表已经实现。
 
 ## 第一版
 

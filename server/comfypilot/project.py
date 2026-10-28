@@ -67,6 +67,7 @@ class ProjectConfig(BaseModel):
     server: ServerConfig = Field(default_factory=ServerConfig)
     targets: list[ExecutionTarget] = Field(default_factory=list, max_length=32)
     default_target_id: str | None = None
+    resource_overrides: dict[str, str] = Field(default_factory=dict, max_length=1000)
 
     @model_validator(mode="after")
     def check_targets(self):
@@ -182,7 +183,7 @@ def migrate_database(project: Project) -> None:
         db.execute("PRAGMA journal_mode=WAL")
         db.execute("BEGIN IMMEDIATE")
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 5:
+        if version > 6:
             raise ProjectError("unsupported_schema", "数据库格式比当前程序更新，请使用对应版本。")
         db.execute(
             "CREATE TABLE IF NOT EXISTS project "
@@ -247,6 +248,11 @@ def migrate_database(project: Project) -> None:
 
             initialize_execution_schema(db)
             db.execute("PRAGMA user_version=5")
+        if version < 6:
+            from comfypilot.resources import initialize_resource_schema
+
+            initialize_resource_schema(db)
+            db.execute("PRAGMA user_version=6")
 
 
 def read_dispatch(project: Project) -> dict[str, bool | str]:
@@ -289,7 +295,7 @@ def read_project(root: Path) -> Project:
     identity = ProjectIdentity.model_validate_json((state / "project.json").read_text("utf-8"))
     with closing(sqlite3.connect((state / "state.sqlite").as_uri() + "?mode=ro", uri=True)) as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 5:
+        if version > 6:
             raise ProjectError("unsupported_schema", "数据库格式比当前程序更新，请使用对应版本。")
         if version >= 3:
             row = db.execute(

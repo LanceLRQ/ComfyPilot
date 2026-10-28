@@ -29,6 +29,7 @@ from comfypilot.project import (
     read_project,
     resolve_project_root,
 )
+from comfypilot.resources_api import PreflightRequest, ResourceFileRequest, ResourceRefreshRequest
 from comfypilot.runtime import RuntimeRecord, read_runtime, require_instance
 from comfypilot.settings_api import (
     ConfigRequest,
@@ -63,6 +64,18 @@ class ConfigArguments(ConnectionArguments, ConfigRequest):
 
 
 class RefreshArguments(ConnectionArguments, RevisionRequest):
+    pass
+
+
+class ResourceRefreshArguments(ConnectionArguments, ResourceRefreshRequest):
+    pass
+
+
+class ResourceFileArguments(ConnectionArguments, ResourceFileRequest):
+    pass
+
+
+class PreflightArguments(ConnectionArguments, PreflightRequest):
     pass
 
 
@@ -125,6 +138,10 @@ class ApplicationReply(BaseModel):
 
 
 PROJECT_API = {
+    "list_resources": ("GET", "/api/resources"),
+    "refresh_resources": ("POST", "/api/resources/refresh"),
+    "get_resource_file": ("POST", "/api/resources/file"),
+    "preflight_recipe": ("POST", "/api/resources/preflight"),
     **{
         name: ("POST", "/api/execution/command")
         for name in (
@@ -152,6 +169,30 @@ PROJECT_API = {
 
 # 仅定义静态协议元数据；不得在此探测项目、服务或 ComfyUI。
 TOOL_DEFINITIONS = {
+    "list_resources": (
+        ConnectionArguments,
+        "读取有效资源快照与独立目标预检记录，不扫描磁盘。",
+        True,
+        True,
+    ),
+    "refresh_resources": (
+        ResourceRefreshArguments,
+        "显式扫描项目与内置资源，冲突拒绝更新；不会执行代码。",
+        False,
+        True,
+    ),
+    "get_resource_file": (
+        ResourceFileArguments,
+        "按内容哈希查看已保存的原件；不读取任意路径。",
+        True,
+        True,
+    ),
+    "preflight_recipe": (
+        PreflightArguments,
+        "保存指定配方与目标的标准 schema 预检，不提交生成，不代表实测通过。",
+        False,
+        True,
+    ),
     "get_execution": (ConnectionArguments, "读取业务修订、方案、运行与独立派发限制。", True, True),
     "create_task": (
         CreateTaskArguments,
@@ -381,7 +422,8 @@ class ProjectBridge:
                 },
             )
             response = connection.getresponse()
-            result = ApplicationReply.model_validate_json(response.read(1048576))
+            limit = 32 * 1024 * 1024 if path.startswith("/api/resources") else 1048576
+            result = ApplicationReply.model_validate_json(response.read(limit))
         except (OSError, HTTPException) as error:
             raise ProjectError(
                 "service_unavailable", "无法访问项目 API，请检查服务并重新连接。"

@@ -364,7 +364,7 @@ Agent 可 read_events 或有上限的 wait_for_events，默认关注任务终态
 
 ## 11. MCP 与应用接口
 
-M1/1.1–1.6 已实现六个生命周期工具、`get_project_status`、六个配置/目标工具、三个监测工具及八个执行工具，参数和错误见 [README](../README.md#stdio-mcp)。下表列出首版完整的拟定语义，未在 README 列出的工具尚未实现。业务接口始终限定当前项目，CLI、MCP 和 Web 调用共享 application 用例。
+M1/1.1–1.6 已实现六个生命周期工具、`get_project_status`、六个配置/目标工具、三个监测工具及八个执行工具，参数和错误见 [README](../README.md#stdio-mcp)。M2/2.1 另实现四个资源工具，见 [模块与资源](resources.md)。下表列出首版完整的拟定语义，未在 README 列出的工具尚未实现。业务接口始终限定当前项目，CLI、MCP 和 Web 调用共享 application 用例。
 
 | 操作组 | 拟定工具 | 约束 |
 | --- | --- | --- |
@@ -455,3 +455,14 @@ SQLite 格式 4 的 `status_samples` 以目标和样本种类覆盖最新值，�
 产品 Skill 的源文件在 `packages/skills/comfypilot/`，构建时包含到 wheel 的 `comfypilot/skills/comfypilot/`。`comfypilot skill-path` 仅读取资源并返回目录，不要求项目、不创建连接。宿主按其发现约定安装完整 Skill 目录；平台业务配置仍全部属于创作项目。Skill 负责根目录选择、显式生命周期、目标/能力缺项、指示和恢复语义，不托管宿主模型或接管 MCP 进程，也不隐式安装/启停 ComfyUI。
 
 安装与兼容证据见 [Agent 接入与 M1 验收](agent-setup.md)。目前只有 macOS 的协议与进程层验证，没有完成实际双宿主和 Linux 验收；M1/1.7 保留未完成状态。
+
+
+### M2/2.1 实现边界
+
+SQLite 格式 6 新增 resource_blobs（SHA-256→文件字节）、resource_revisions（显式接受的目录修订）、resource_preflights（配方哈希/目标的独立标准预检记录），execution_plans.resources 保存不可变配方和图模板。迁移保留配置、业务对象、回执与历史意图；旧方案没有资源快照时后续执行需重建。配置增加 resource_overrides 显式来源映射，资源修订不与配置/业务修订混用。
+
+资源扫描只读取约定目录，不加载代码；单文件 5 MiB、批次 32 MiB、1000 文件、解析目录 30 MiB。模块/Recipe/节点声明与画布/API 图分别校验，同名拒绝刷新，覆盖只能显式选择来源。有效声明不代表目标已安装。目标预检根据当前配置、服务实例和 Worker 的节点 schema，独立保存缺节点/模型、未知、定义不匹配、通过及过期状态；不调用 /prompt，不验证节点固定版本或模型文件。节点目录证据 15 秒后要求重新探测，不跟随普通心跳无限延长。
+
+新方案从有效资源修订取得并冻结配方 manifest、输入哈希、参数化 API 图模板和关联文件哈希，Run 复制该快照，资源刷新不修改旧任务。内部领取校验模板哈希和当前目标 schema；最终媒体路径、最终执行图哈希由后续上传/提交链路另行物化。当前仍不消费生成队列。
+
+页面与 MCP 共用资源用例，原件按哈希读取并作纯文本显示。内置人物替换只有模块声明，M2/2.2 才交付真实配方；本机/远程真实生成、Linux 和实际双宿主验收保留。格式、接口与操作步骤见 [模块与资源](resources.md)。

@@ -15,6 +15,7 @@ const configSchema = z.object({
   server: z.object({ host: z.literal("127.0.0.1"), port: z.number().int() }),
   targets: z.array(targetSchema),
   default_target_id: z.string().nullable(),
+  resource_overrides: z.record(z.string(), z.string()),
 });
 const snapshotSchema = z.object({
   revision: z.number().int(),
