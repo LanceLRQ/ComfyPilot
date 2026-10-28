@@ -184,3 +184,5 @@ make package
 ## 许可证
 
 [MIT License](LICENSE)
+
+M2/2.7–2.8 已提供有限重试、原Run幂等恢复及[远程素材桥接](docs/remote-assets.md)。`comfypilot bridge-path`定位随包扩展，需经用户指定管理通道安装；真实环境生成验收以看板记录为准。

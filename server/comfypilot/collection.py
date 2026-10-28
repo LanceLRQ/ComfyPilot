@@ -12,10 +12,10 @@ from uuid import uuid4
 
 from comfypilot.execution import get_execution, record_change
 from comfypilot.generation import save_run
-from comfypilot.media import CHUNK_BYTES, check_space, get_asset, media_directory
+from comfypilot.media import get_asset, media_directory
 from comfypilot.media_tools import inspect_media, media_command, require_tools
 from comfypilot.project import Project, ProjectError
-from comfypilot.replicas import fingerprint, local_path, read_output
+from comfypilot.replicas import fingerprint, read_output, transfer_output
 
 
 def initialize_collection_schema(db: sqlite3.Connection) -> None:
@@ -136,26 +136,20 @@ async def collect_run(project: Project, run_id: str, *, now: datetime | None = N
                 raise ProjectError("output_unmanaged", "输出不属于本Run受管空间，保留声明证据。")
             checkpoint.setdefault("outputs", {})[slot] = replica
             phase("transferring", slot=slot, bytes_done=0, bytes_total=replica["size"])
-            source = local_path(
-                final["target_snapshot"]["target"],
-                str(project.identity.project_id),
-                "output",
-                replica["relative_path"],
-            )
             temporary = media_directory(project, "staging") / (uuid4().hex + ".part")
             phase("transferring", staging_token=temporary.name)
-            with source.open("rb") as incoming, temporary.open("xb") as outgoing:
-                while chunk := incoming.read(CHUNK_BYTES):
-                    check_space(temporary.parent, len(chunk))
-                    outgoing.write(chunk)
-                    checkpoint["bytes_done"] += len(chunk)
-                    phase("transferring")
-                    await asyncio.sleep(0)
+
+            def progress(size):
+                phase("transferring", bytes_done=size)
+
+            source_proof = await transfer_output(
+                project, final["target_snapshot"]["target"], replica, temporary, progress
+            )
             proof = await fingerprint(temporary)
             if (
                 proof["sha256"] != replica["content_hash"]
                 or proof["size"] != replica["size"]
-                or await fingerprint(source) != replica["fingerprint"]
+                or source_proof != replica["fingerprint"]
             ):
                 raise ProjectError("replica_changed", "输出在传输期间变化，不覆盖旧证据。")
             phase("checking")

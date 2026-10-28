@@ -133,12 +133,20 @@ def get_target_status(
             result["node_catalog_hash"] = data["hash"]
             result["node_schemas"] = data.get("node_schemas", {})
             result["node_catalog_expires_at"] = data.get("expires_at")
+        elif kind == "assets":
+            result["capabilities"].update(data["asset_capabilities"])
         else:
             result.update(data)
     clock = now or datetime.now(UTC)
 
     def expire(value):
         if isinstance(value, dict):
+            if (
+                value.get("status") == "available"
+                and value.get("expires_at")
+                and clock >= datetime.fromisoformat(value["expires_at"])
+            ):
+                value["status"] = "unknown"
             if value.get("availability") == "fresh" and clock >= datetime.fromisoformat(
                 value["expires_at"]
             ):
@@ -190,6 +198,16 @@ class TargetMonitor:
         )
 
     async def poll(self) -> None:
+        from comfypilot.replicas import probe_asset_capabilities
+
+        asset_capabilities = await probe_asset_capabilities(self.project, self.target.model_dump())
+        observed = datetime.now(UTC)
+        for value in asset_capabilities.values():
+            value.update(
+                observed_at=observed.isoformat(),
+                expires_at=(observed + timedelta(seconds=15)).isoformat(),
+            )
+        self.store("assets", {"asset_capabilities": asset_capabilities})
         try:
             headers = target_headers(self.project, self.target)
             if self.target.credential_ref and not headers:

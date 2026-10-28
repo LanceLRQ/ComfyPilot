@@ -21,7 +21,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
+dev = [
+    "aiohttp>=3.14,<4",
+    "pytest>=8,<10",
+    "ruff>=0.11,<1",
+]
 
 [project.scripts]
 comfypilot = "comfypilot.cli:main"
@@ -33,6 +37,7 @@ packages = ["server/comfypilot"]
 [tool.hatch.build.targets.wheel.force-include]
 "packages/skills/comfypilot" = "comfypilot/skills/comfypilot"
 "presets" = "comfypilot/presets"
+"extensions/comfypilot_assets" = "comfypilot/extensions/comfypilot_assets"
 
 [tool.hatch.build]
 artifacts = ["server/comfypilot/web/**"]

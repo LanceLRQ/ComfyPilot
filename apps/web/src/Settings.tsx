@@ -9,7 +9,10 @@ const targetSchema = z.object({
   enabled: z.boolean(),
   credential_ref: z.string().nullable(),
   assets: z
-    .object({ mode: z.literal("local"), input_dir: z.string(), output_dir: z.string() })
+    .discriminatedUnion("mode", [
+      z.object({ mode: z.literal("local"), input_dir: z.string(), output_dir: z.string() }),
+      z.object({ mode: z.literal("bridge") }),
+    ])
     .nullable(),
 });
 const configSchema = z.object({
@@ -289,25 +292,31 @@ export function Settings() {
                           }
                         />
                       </label>
-                      <label className="checkbox">
-                        <input
-                          type="checkbox"
-                          checked={target.assets !== null}
+                      <label>
+                        素材传输方式
+                        <select
+                          value={target.assets?.mode ?? "none"}
                           onChange={(event) =>
                             change({
-                              assets: event.target.checked
-                                ? {
-                                    mode: "local",
-                                    input_dir: "",
-                                    output_dir: "",
-                                  }
-                                : null,
+                              assets:
+                                event.target.value === "bridge"
+                                  ? { mode: "bridge" }
+                                  : event.target.value === "local"
+                                    ? {
+                                        mode: "local",
+                                        input_dir: "",
+                                        output_dir: "",
+                                      }
+                                    : null,
                             })
                           }
-                        />
-                        配置本机可访问的素材目录
+                        >
+                          <option value="none">未配置</option>
+                          <option value="local">平台可访问的本机目录</option>
+                          <option value="bridge">ComfyUI 素材桥接</option>
+                        </select>
                       </label>
-                      {target.assets &&
+                      {target.assets?.mode === "local" &&
                         (["input_dir", "output_dir"] as const).map((key) => (
                           <label key={key}>
                             {key === "input_dir"
@@ -315,13 +324,19 @@ export function Settings() {
                               : "ComfyUI output 绝对路径"}
                             <input
                               required
-                              value={target.assets?.[key] ?? ""}
+                              value={target.assets?.mode === "local" ? target.assets[key] : ""}
                               onChange={(event) =>
                                 change({
                                   assets: {
                                     mode: "local",
-                                    input_dir: target.assets?.input_dir ?? "",
-                                    output_dir: target.assets?.output_dir ?? "",
+                                    input_dir:
+                                      target.assets?.mode === "local"
+                                        ? target.assets.input_dir
+                                        : "",
+                                    output_dir:
+                                      target.assets?.mode === "local"
+                                        ? target.assets.output_dir
+                                        : "",
                                     [key]: event.target.value,
                                   },
                                 })

@@ -16,6 +16,7 @@ def main(argv: list[str] | None = None) -> int:
     init = commands.add_parser("init", help="在明确指定的项目目录初始化")
     init.add_argument("--project-root", required=True, type=Path)
     commands.add_parser("skill-path", help="只读显示随安装包交付的 Agent Skill 目录")
+    commands.add_parser("bridge-path", help="只读显示随安装包交付的 ComfyUI 素材桥接目录")
     for command, help_text in [
         ("serve", "前台运行项目 API 和独立 Worker"),
         ("start", "在后台启动或复用项目实例"),
@@ -29,6 +30,14 @@ def main(argv: list[str] | None = None) -> int:
             child.add_argument("--port", type=int, help="本次服务端口，默认读取项目配置")
     args = parser.parse_args(argv)
     try:
+        if args.command == "bridge-path":
+            folder = Path(__file__).parent / "extensions/comfypilot_assets"
+            if not folder.is_dir():
+                folder = Path(__file__).resolve().parents[2] / "extensions/comfypilot_assets"
+            if not (folder / "bridge.py").is_file():
+                raise ProjectError("bridge_assets_missing", "安装包缺少素材桥接扩展。")
+            print(json.dumps({"name": "comfypilot_assets", "path": str(folder.resolve())}))
+            return 0
         if args.command == "skill-path":
             skill = Path(__file__).parent / "skills/comfypilot"
             if not (skill / "SKILL.md").is_file():

@@ -44,3 +44,5 @@ stop_conditions 支持 on_failure（失败后停止）与 after_limit；最大�
 - 实际生成消费与回执对账已接入。意图已存在时仅核对原目标、原prompt_id；丢失prompt_id时按项目/Run/意图标记匹配，不明状态保留并阻止新提交。只有history明确success且completed才进入collecting，节点完成不算成功。后台已自动收片，list_versions 返回当前收片阶段、字节/错误及已完整解码并通过配方规格检查的ready版本。非H.264/MP4视频会有独立检查的播放代理；原片和代理不能混淆。不同Run即使字节相同也是独立版本，不合并来源。当前没有清理、审片结论或事件流工具；不要调用设计文档中的未来工具，也不要编辑 SQLite 完成这些操作。
 
 收片 checkpoint 保存阶段、已传字节、输出指纹、暂存token、尝试次数与下次时间。临时读取错误最多3次额外重试，耗尽后blocked；缺工具/空间直接blocked；媒体损坏或规格不符使Run.failed。按既有用户指示修复环境后使用resume_collection，首次恢复使用新的UUID command_id；同一次resume_collection请求回执丢失时才复用这次恢复的ID。原execute_plan及先前恢复轮次的command_id均不能拿来做新恢复，否则会command_mismatch或只返回旧回执。沿用的是run_id，不用execute_plan重跑。部分文件会从头重传，非通用字节续传；同名文件变化仍阻塞，不能借恢复覆盖旧指纹。
+
+远程素材配置assets.mode=bridge，comfypilot bridge-path返回完整扩展目录；只通过用户指定的管理通道安装，核对队列空闲后按原方式重启并probe_target验证。桥接仅允许项目命名空间下输入上传、声明输出下载、stat与known列表；没有shell、删除或任意主机控制。未安装unsupported、断线unknown，不自动切换目标。原Run输出依旧须完整传输/解码/配方检查后才可审。

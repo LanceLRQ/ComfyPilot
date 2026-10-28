@@ -40,6 +40,11 @@ class LocalAssets(BaseModel):
         return value
 
 
+class BridgeAssets(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    mode: Literal["bridge"]
+
+
 class ExecutionTarget(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     id: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
@@ -48,7 +53,7 @@ class ExecutionTarget(BaseModel):
     base_url: str
     enabled: bool = True
     credential_ref: str | None = Field(default=None, pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
-    assets: LocalAssets | None = None
+    assets: LocalAssets | BridgeAssets | None = None
 
     @field_validator("base_url")
     @classmethod

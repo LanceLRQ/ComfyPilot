@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import sqlite3
 from contextlib import closing
 from datetime import UTC, datetime
@@ -85,6 +86,47 @@ async def fingerprint(path: Path) -> dict:
     }
 
 
+async def inspect_replica(project: Project, target: dict, role: str, relative: str) -> dict:
+    if (target.get("assets") or {}).get("mode") == "bridge":
+        from comfypilot.asset_bridge import remote_stat
+
+        return await remote_stat(project, target, role, relative)
+    proof = await fingerprint(local_path(target, str(project.identity.project_id), role, relative))
+    return {"fingerprint": proof, "content_hash": proof["sha256"], "size": proof["size"]}
+
+
+async def probe_asset_capabilities(project: Project, target: dict) -> dict:
+    assets = target.get("assets")
+    status, reason = "unsupported", "未配置素材适配器。"
+    if assets:
+        try:
+            if assets["mode"] == "bridge":
+                from comfypilot.asset_bridge import probe_bridge
+
+                await probe_bridge(project, target)
+            else:
+                for role, permission in (("input", os.W_OK), ("output", os.R_OK)):
+                    local_path(
+                        target,
+                        str(project.identity.project_id),
+                        role,
+                        f"ComfyPilot/{project.identity.project_id}/probe",
+                    )
+                    if not os.access(assets[role + "_dir"], permission):
+                        raise ProjectError("media_transfer_unavailable", "本机素材目录权限不足。")
+            status, reason = "available", "已验证配置的素材适配器。"
+        except (ProjectError, OSError) as error:
+            status = (
+                "unsupported"
+                if isinstance(error, ProjectError) and error.code == "media_transfer_unavailable"
+                else "unknown"
+            )
+            reason = error.code if isinstance(error, ProjectError) else "directory_unavailable"
+    return {
+        name: {"status": status, "reason": reason} for name in ("media_transfer", "managed_listing")
+    }
+
+
 def list_replicas(project: Project) -> dict:
     with closing(sqlite3.connect(project.database)) as db:
         return {
@@ -120,7 +162,6 @@ async def put_input(project: Project, target: dict, asset_id: str, owner: str) -
     if suffix not in {".mp4", ".mov", ".mkv", ".webm", ".png", ".jpg", ".jpeg", ".webp"}:
         raise ProjectError("media_invalid", "输入文件扩展名不受支持，请显式转换后导入。")
     relative = f"ComfyPilot/{project.identity.project_id}/{asset_id}{suffix}"
-    destination = local_path(target, str(project.identity.project_id), "input", relative)
     key = content_hash(target)
     with closing(sqlite3.connect(project.database)) as db:
         row = db.execute(
@@ -130,10 +171,41 @@ async def put_input(project: Project, target: dict, asset_id: str, owner: str) -
         ).fetchone()
     if row:
         replica = json.loads(row[0])
-        if await fingerprint(destination) != replica["fingerprint"]:
+        if (await inspect_replica(project, target, "input", relative))["fingerprint"] != replica[
+            "fingerprint"
+        ]:
             raise ProjectError("replica_changed", "既有副本指纹变化，不覆盖或接管同名文件。")
         save_replica(project, replica, owner)
         return replica
+    remote = (target.get("assets") or {}).get("mode") == "bridge"
+    if remote:
+        from comfypilot.asset_bridge import upload_input
+
+        proof = (
+            await upload_input(
+                project, target, asset_path(project, asset_id), relative, asset["content_hash"]
+            )
+        )["fingerprint"]
+        if proof["sha256"] != asset["content_hash"] or proof["size"] != asset["size"]:
+            raise ProjectError("asset_mismatch", "上传副本与授权素材哈希/大小不一致。")
+        replica = {
+            "id": str(uuid4()),
+            "project_id": str(project.identity.project_id),
+            "target_key": key,
+            "target_snapshot": target,
+            "asset_id": asset_id,
+            "role": "input",
+            "relative_path": relative,
+            "size": proof["size"],
+            "content_hash": proof["sha256"],
+            "fingerprint": proof,
+            "managed": True,
+            "cleanup_eligible": False,
+            "created_at": datetime.now(UTC).isoformat(),
+        }
+        save_replica(project, replica, owner)
+        return replica
+    destination = local_path(target, str(project.identity.project_id), "input", relative)
     if destination.exists():
         raise ProjectError("replica_conflict", "目标存在未登记同名文件，不接管或覆盖。")
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -193,8 +265,8 @@ async def read_output(
             "declaration": declaration,
             "reason": "输出不在本Run受管空间，仅保留声明证据。",
         }
-    path = local_path(target, str(project.identity.project_id), "output", relative)
-    proof = await fingerprint(path)
+    inspected = await inspect_replica(project, target, "output", relative)
+    proof = inspected["fingerprint"]
     replica = {
         "id": str(uuid4()),
         "project_id": str(project.identity.project_id),
@@ -206,6 +278,7 @@ async def read_output(
         "size": proof["size"],
         "content_hash": proof["sha256"],
         "fingerprint": proof,
+        "fingerprint_id": inspected.get("fingerprint_id"),
         "managed": True,
         "cleanup_eligible": False,
         "declaration": declaration,
@@ -223,6 +296,27 @@ async def read_output(
         replica = old
     save_replica(project, replica, run_id)
     return replica
+
+
+async def transfer_output(
+    project: Project, target: dict, replica: dict, destination: Path, progress
+):
+    if (target.get("assets") or {}).get("mode") == "bridge":
+        from comfypilot.asset_bridge import download_output
+
+        return await download_output(project, target, replica, destination, progress)
+    source = local_path(
+        target, str(project.identity.project_id), "output", replica["relative_path"]
+    )
+    size = 0
+    with source.open("rb") as incoming, destination.open("xb") as outgoing:
+        while chunk := incoming.read(CHUNK_BYTES):
+            check_space(destination.parent, len(chunk))
+            outgoing.write(chunk)
+            size += len(chunk)
+            progress(size)
+            await asyncio.sleep(0)
+    return await fingerprint(source)
 
 
 async def materialize_run(project: Project, run_id: str) -> dict:

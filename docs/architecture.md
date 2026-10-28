@@ -494,3 +494,5 @@ M2/2.5 的确定性 Worker 循环已接入最终图准备、事务预留、一�
 M2/2.6 已接入独立收片循环；数据格式9新增 output_versions、output_checks，并将collecting移出生成唯一索引。版本、检查、输出引用及clip_ready原子登记，详见[自动收片与基础预览](collection.md)。
 
 M2/2.7 已保存收片重试截止时间、次数、输出指纹和暂存文件检查点，并通过统一业务命令resume_collection提供幂等恢复。技术检查失败使Run.failed，重试仅操作原Run的收片，详见[收片恢复规则](collection.md)。
+
+M2/2.8 提供可独立安装的ComfyUI素材扩展与HTTP流式客户端，接口和能力边界见[远程素材桥接](remote-assets.md)。扩展随wheel交付但不由平台自动导入；配置桥接后才探测和使用，不增加默认MCP连接行为。
