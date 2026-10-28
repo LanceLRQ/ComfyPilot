@@ -18,6 +18,67 @@ from test_media import imported
 __all__ = ["media_files"]
 
 
+def test_monitor_follows_persisted_submission_client_after_dispatch_and_restart(
+    generation_workspace,
+):
+    from comfypilot.generation import advance_generation
+    from comfypilot.monitoring import TargetMonitor, get_target_status
+    from comfypilot.project import ExecutionTarget
+
+    project, instance, state, _ = generation_workspace
+    target = ExecutionTarget.model_validate(get_project(project)["config"]["targets"][0])
+
+    async def observe():
+        monitor = TargetMonitor(project, instance, os.getpid(), 2, target)
+        events = asyncio.create_task(monitor.events())
+        try:
+            async with asyncio.timeout(2):
+                while not state.get("websocket_clients"):
+                    await asyncio.sleep(0.02)
+            assert state["websocket_clients"] == [monitor.client_id]
+            await advance_generation(project, instance, os.getpid())
+            intent = get_execution(project)["runs"][0]["intent"]["client_id"]
+            async with asyncio.timeout(3):
+                while True:
+                    snapshot = get_target_status(project, instance, os.getpid(), "render")
+                    if snapshot["node_progress"]["availability"] == "fresh":
+                        break
+                    await asyncio.sleep(0.02)
+            assert snapshot["stage"]["value"]["prompt_id"] == "fixture-prompt"
+            assert snapshot["node_progress"]["value"]["value"] == 2
+            assert state["websocket_clients"][-1] == intent
+        finally:
+            events.cancel()
+            await asyncio.gather(events, return_exceptions=True)
+
+        recovered = TargetMonitor(project, uuid4(), os.getpid(), 2, target)
+        events = asyncio.create_task(recovered.events())
+        try:
+            async with asyncio.timeout(2):
+                while len(state["websocket_clients"]) < 3:
+                    await asyncio.sleep(0.02)
+            assert state["websocket_clients"][-1] == intent
+            changed = target.model_copy(update={"base_url": "http://127.0.0.1:1"})
+            other = TargetMonitor(project, instance, os.getpid(), 2, changed)
+            assert other.event_client_id() == other.client_id
+            from comfypilot.generation import save_run
+
+            run = get_execution(project)["runs"][0]
+            save_run(project, run["id"], "collecting", {})
+            async with asyncio.timeout(2):
+                while state["websocket_clients"][-1] != recovered.client_id:
+                    await asyncio.sleep(0.02)
+            snapshot = get_target_status(project, recovered.instance_id, os.getpid(), "render")
+            assert snapshot["node_progress"]["value"] is None
+            assert snapshot["stage"]["value"] is None
+            assert len(state["posts"]) == 1
+        finally:
+            events.cancel()
+            await asyncio.gather(events, return_exceptions=True)
+
+    asyncio.run(observe())
+
+
 @pytest.fixture
 def generation_workspace(tmp_path, media_files):
     state = {}

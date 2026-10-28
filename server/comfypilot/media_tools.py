@@ -13,7 +13,7 @@ def require_tools() -> dict[str, str]:
     if not all(tools.values()):
         raise ProjectError(
             "media_tools_missing",
-            "缺少 ffmpeg/ffprobe，请在平台运行环境安装并加入 PATH 后重新提交。",
+            "缺少 ffmpeg/ffprobe，请在平台运行环境安装并加入 PATH。",
         )
     return tools
 

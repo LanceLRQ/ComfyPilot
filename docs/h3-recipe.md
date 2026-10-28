@@ -1,6 +1,6 @@
 # 首发人物替换配方与环境验收
 
-日期：2026-10-28（Asia/Shanghai）。M2/2.2 交付 `minimax-h3-replacement`：基于 MiniMax H3 原生 R2V 的单人替换配方。资源发现、API 图校验、参数冻结与目标标准预检已经接入；完整生成、安装重启/回退和画布往返仍保留真实验收。
+日期：2026-10-28（Asia/Shanghai）。M2/2.2 交付 `minimax-h3-replacement`：基于 MiniMax H3 原生 R2V 的单人替换配方。资源发现、API 图校验、参数冻结、预检及执行收片已接入；M2/2.9 的两种部署真实生成结果见[验收记录](h3-validation.md)。核心/模型全新安装与实际回退、画布往返继续保留。
 
 ## 使用方式与范围
 
@@ -45,7 +45,7 @@ Agent 在当前创作项目显式连接平台后，先 `list_resources`，再以
 | 真实远程 ComfyUI | HTTP/WebSocket、971 节点和基础监测通过；H3 标准预检 passed，缺节点/模型/绑定错误均为 0；完整监测经 MCP 返回约 748 KiB |
 | 工程与安装包 | make check 通过，109 项 pytest；make package 和源码外干净 venv 的 CLI/Skill/MCP、双项目、API/Worker/Web、H3 资源/冻结、SQLite 完整性与同目标真实预检均通过 |
 | 预处理示例 | FFmpeg/ffprobe 8.1.1 对合成素材执行有偏移的转换/补边/取帧，通过 768×448、24/1 fps、124 帧检查；不代表目标已装 FFmpeg |
-| 目标环境和生成 | 源码提交/模型实际哈希、依赖安装、重启与回退、画布导入再导出、真实显存/视觉/音频质量仍未实测 |
-| 其他环境 | Codex/Claude Code 双宿主、Linux 项目平台、本机 ComfyUI 保留 M1/1.7；完整生成/收片保留 M2/2.9 |
+| 目标环境和生成 | 核心提交、四模型实际大小/哈希、目标包版本与桥接文件已核验；两种部署真实生成与收片通过；已有核心/模型满足依赖，未重装或演练核心回退 |
+| 其他环境 | Linux 平台同机目录模式与 macOS 远程桥接已实测；Codex/Claude Code 双宿主完整矩阵、画布往返、其他硬件与用户视觉/音频质量继续保留 |
 
 预检不会执行 VALIDATE_INPUTS、自定义 Python、权重读取或 POST /prompt。标准预检通过时仍返回 `version_verification: unknown`、`materialization: pending`、`real_test: not_run`。后续完整验收需保存素材/配方/最终图哈希、prompt_id、目标依赖证据、history 和 ffprobe 结果，再由用户审片，不能用参考项目历史成片替代当前交付的实测。

@@ -197,6 +197,18 @@ class TargetMonitor:
             data,
         )
 
+    def event_client_id(self) -> str:
+        with closing(sqlite3.connect(self.project.database, timeout=1)) as db:
+            row = db.execute(
+                "SELECT intent FROM execution_runs WHERE status IN "
+                "('dispatching','submitted','running','reconciling') AND intent IS NOT NULL"
+            ).fetchone()
+        if row:
+            intent = json.loads(row[0])
+            if intent["target_snapshot"]["target"] == self.target.model_dump(mode="json"):
+                return intent["client_id"]
+        return self.client_id
+
     async def poll(self) -> None:
         from comfypilot.replicas import probe_asset_capabilities
 
@@ -286,13 +298,21 @@ class TargetMonitor:
         uri = source.replace("http://", "ws://", 1).replace("https://", "wss://", 1)
         state = {"stage": metric(None, source), "node_progress": metric(None, source, "steps")}
         failures = 0
+        client_id = self.client_id
         while True:
+            selected = self.event_client_id()
+            if selected != client_id:
+                state = {
+                    "stage": metric(None, source),
+                    "node_progress": metric(None, source, "steps"),
+                }
+                client_id = selected
             try:
                 headers = target_headers(self.project, self.target)
                 if self.target.credential_ref and not headers:
                     raise ProjectError("credential_missing", "请配置项目执行端凭据。")
                 async with ConfiguredWebSocket(
-                    uri + "?clientId=" + self.client_id,
+                    uri + "?clientId=" + client_id,
                     additional_headers=headers,
                     proxy=None,
                     open_timeout=2,
@@ -303,8 +323,10 @@ class TargetMonitor:
                     state["websocket"] = metric(True, source)
                     self.store("events", state)
                     while True:
+                        if client_id != self.event_client_id():
+                            break
                         try:
-                            content = await asyncio.wait_for(connection.recv(), timeout=5)
+                            content = await asyncio.wait_for(connection.recv(), timeout=1)
                         except TimeoutError:
                             state["websocket"] = metric(True, source)
                             self.store("events", state)
@@ -348,6 +370,7 @@ class TargetMonitor:
                             continue
                         state["websocket"] = metric(True, source)
                         self.store("events", state)
+                continue
             except (OSError, WebSocketException, TimeoutError, ProjectError):
                 state["websocket"] = metric(False, source)
                 self.store("events", state)

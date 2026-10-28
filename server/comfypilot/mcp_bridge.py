@@ -282,7 +282,7 @@ TOOL_DEFINITIONS = {
     ),
     "execute_plan": (
         ExecutePlanArguments,
-        "在用户范围内幂等入队；当前阶段仅排队，尚不提交生成。",
+        "在用户范围内幂等入队；Worker 在派发允许且门禁通过后提交生成。",
         False,
         False,
     ),

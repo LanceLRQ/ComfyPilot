@@ -116,7 +116,7 @@ def comfy_server(
     @app.websocket("/ws")
     async def websocket(connection: WebSocket):
         await connection.accept()
-        if events:
+        if events and generation is None:
             await connection.send_json(
                 {"type": "executing", "data": {"node": "3", "prompt_id": "external-prompt"}}
             )
@@ -131,6 +131,34 @@ def comfy_server(
             await connection.close()
             return
         try:
+            if generation is not None:
+                client_id = connection.query_params.get("clientId")
+                generation.setdefault("websocket_clients", []).append(client_id)
+                sent = False
+                while True:
+                    try:
+                        await asyncio.wait_for(connection.receive_text(), timeout=0.05)
+                    except TimeoutError:
+                        posts = generation.get("posts", [])
+                        if posts and client_id == posts[-1]["client_id"] and not sent:
+                            await connection.send_json(
+                                {
+                                    "type": "executing",
+                                    "data": {"node": "1", "prompt_id": "fixture-prompt"},
+                                }
+                            )
+                            await connection.send_json(
+                                {
+                                    "type": "progress",
+                                    "data": {
+                                        "value": 2,
+                                        "max": 8,
+                                        "node": "1",
+                                        "prompt_id": "fixture-prompt",
+                                    },
+                                }
+                            )
+                            sent = True
             while True:
                 await connection.receive_text()
         except WebSocketDisconnect:

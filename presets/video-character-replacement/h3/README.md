@@ -2,7 +2,7 @@
 
 配方 ID：`minimax-h3-replacement`。模块 ID：`video-character-replacement`。首发采用 MiniMax H3 基础 R2V，不使用 Turbo、LoRA、ControlNet 或第三方自定义节点。资源可随 wheel 脱离源码读取。
 
-当前仅支持资源发现、冻结与标准 schema 预检。平台没有媒体导入、最终执行图物化、真实提交和自动收片；完整生成与质量验收保留到 M2/2.9。Agent 不能因 preflight passed 宣称已出片。
+平台已接入媒体导入、最终执行图物化、真实提交和自动收片。Agent 不能因 preflight passed 宣称已出片；必须等待原目标 history 明确成功，且收片版本 ready、技术检查通过。部署实测与未验范围见项目的 docs/h3-validation.md，人工审片与采用由用户决定。
 
 ## 资源和版本
 
@@ -49,7 +49,7 @@ ComfyUI 固定为 `0.38.0`，提交 `6b747c0428c343e1417219641db93a4fb7cb69ae`�
 图本身没有剪辑和时间偏移功能。输入必须预先完成以下处理：
 
 1. 用户/Agent 明确原片 `start_seconds`，不默认沿用参考项目的历史偏移。配方消费准备后素材的第 0 帧；原片偏移另存在项目任务元数据。
-2. 先转 CFR 24 fps，再取连续 124 帧。足够时长约 5.167 秒；不足不默认补帧或循环。M2/2.3 接入前由 Agent 在有素材访问能力的环境准备。
+2. 先转 CFR 24 fps，再取连续 124 帧。足够时长约 5.167 秒；不足不默认补帧或循环。可用平台 extract_clip 显式提取，保留原片时间映射。
 3. 保持画面比例，缩放后补边至 768×448，默认不裁掉人物。若要裁剪，明确裁剪框并保留原片→工作片映射，不拉伸人物、不静默改 FPS。
 4. 参考图仅用于身份/服装，不自动分割、抠图、定位人物或创建多角色参考。
 
@@ -112,4 +112,4 @@ Python/PyTorch 依赖以固定核心的 requirements.txt 为基线，GPU wheel �
 
 节点参数依据固定核心的 [H3 实现](https://github.com/Comfy-Org/ComfyUI/blob/6b747c0428c343e1417219641db93a4fb7cb69ae/comfy_extras/nodes_minimax_h3.py)、[V3 输入展开](https://github.com/Comfy-Org/ComfyUI/blob/6b747c0428c343e1417219641db93a4fb7cb69ae/comfy_api/latest/_io.py)、[视频保存](https://github.com/Comfy-Org/ComfyUI/blob/6b747c0428c343e1417219641db93a4fb7cb69ae/comfy_extras/nodes_video.py)、[PreviewVideo 输出](https://github.com/Comfy-Org/ComfyUI/blob/6b747c0428c343e1417219641db93a4fb7cb69ae/comfy_api/latest/_ui.py)与[官方教程](https://docs.comfy.org/tutorials/video/minimax/minimax-h3)。
 
-实测范围与结果见公开 `docs/h3-recipe.md` 和 `docs/agent-setup.md`。目标终端依赖/哈希、实际安装重启/回退、画布往返、显存和完整生成质量仍需真实环境验收；双宿主、Linux 项目平台和本机 ComfyUI 的验收另留 M1/1.7，不用远端 Linux GPU 的可达性代替。
+实测范围与结果见公开 `docs/h3-validation.md`、`docs/h3-recipe.md` 和 `docs/agent-setup.md`。新增目标仍须单独验证依赖、哈希和生成能力，不能借用其他目标的结果。模型/核心全新安装与回退、画布往返、双宿主完整矩阵及用户视觉/音频质量验收继续保留；技术检查通过不代表用户采用。
