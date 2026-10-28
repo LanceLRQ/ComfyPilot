@@ -7,7 +7,13 @@ from uuid import uuid4
 
 import yaml
 
-from comfypilot.project import ProjectError, initialize_project, load_project, resolve_project_root
+from comfypilot.project import (
+    ProjectError,
+    initialize_project,
+    load_project,
+    read_project,
+    resolve_project_root,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -17,6 +23,12 @@ def main(argv: list[str] | None = None) -> int:
     init.add_argument("--project-root", required=True, type=Path)
     commands.add_parser("skill-path", help="只读显示随安装包交付的 Agent Skill 目录")
     commands.add_parser("bridge-path", help="只读显示随安装包交付的 ComfyUI 素材桥接目录")
+    export = commands.add_parser("export", help="导出带校验清单的项目备份")
+    export.add_argument("--project-root", required=True, type=Path)
+    export.add_argument("--destination", required=True, type=Path)
+    restore = commands.add_parser("restore", help="校验备份后恢复为新项目")
+    restore.add_argument("--project-root", required=True, type=Path)
+    restore.add_argument("--bundle-path", required=True, type=Path)
     for command, help_text in [
         ("serve", "前台运行项目 API 和独立 Worker"),
         ("start", "在后台启动或复用项目实例"),
@@ -49,6 +61,16 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps({"name": "comfypilot", "path": str(skill.resolve())}))
             return 0
         root = resolve_project_root(args.project_root)
+        if args.command in {"export", "restore"}:
+            from comfypilot.backup import export_project, restore_project
+
+            result = (
+                export_project(read_project(root), args.destination)
+                if args.command == "export"
+                else restore_project(args.bundle_path, root)
+            )
+            print(json.dumps(result, ensure_ascii=False))
+            return 0
         if args.command == "init":
             project = initialize_project(root)
             print(json.dumps(project.summary(), ensure_ascii=False))
@@ -89,7 +111,8 @@ def main(argv: list[str] | None = None) -> int:
             json.dumps(
                 {
                     "code": "project_unavailable",
-                    "message": "项目无法读取或写入，请检查目录权限、配置和数据库完整性。",
+                    "message": "项目无法读写，请检查空间、权限和配置；"
+                    "疑似库损坏时停止平台、保留现场并用完整备份恢复到新目录。",
                 },
                 ensure_ascii=False,
             ),

@@ -45,6 +45,8 @@ uv run --locked comfypilot resume-dispatch --project-root /absolute/path/to/proj
 
 CLI 必须显式传入绝对项目目录，不会猜测当前项目。`init` 可重复执行，保留已有项目标识、配置和数据；其他命令只加载已经初始化的项目。默认仅监听 `127.0.0.1`，无需登录；可显式开启[局域网审片](docs/lan-review.md)，管理操作仍限本机。进程管理使用 POSIX 文件锁和会话机制，macOS/Linux 的安装包平台启停已实测，双宿主完整矩阵仍在 M1/1.7，暂不支持 Windows。
 
+项目支持[带哈希清单的导出、恢复与目录移动](docs/project-backup.md)。恢复使用新 UUID，暂停派发并禁用执行端，保留审片和采用记录。
+
 初始化产生的文件全部位于指定项目内：
 
 | 路径 | 用途 |

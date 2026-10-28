@@ -11,6 +11,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import CallToolResult, ListToolsResult, TextContent, Tool, ToolAnnotations
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from comfypilot.backup import ExportRequest, RestoreRequest, restore_project
 from comfypilot.cleanup import CleanupScope, ExecuteCleanup, PrepareCleanup
 from comfypilot.events import EventsRequest, WaitEventsRequest
 from comfypilot.execution import (
@@ -65,6 +66,14 @@ class ConnectionArguments(ProjectArguments):
     connection_ref: str | None = Field(
         default=None, min_length=1, description="本 MCP 进程 connect_service 返回的连接引用。"
     )
+
+
+class ExportArguments(ConnectionArguments, ExportRequest):
+    pass
+
+
+class RestoreArguments(ProjectArguments, RestoreRequest):
+    pass
 
 
 class StorageArguments(ConnectionArguments, CleanupScope):
@@ -222,6 +231,7 @@ class ApplicationReply(BaseModel):
 
 
 PROJECT_API = {
+    "export_project": ("POST", "/api/backup/export"),
     "execute_cleanup": ("POST", "/api/cleanup/execute"),
     "list_cleanup": ("GET", "/api/cleanup"),
     "inspect_storage": ("POST", "/api/cleanup/inspect"),
@@ -282,6 +292,18 @@ PROJECT_API = {
 
 # 仅定义静态协议元数据；不得在此探测项目、服务或 ComfyUI。
 TOOL_DEFINITIONS = {
+    "export_project": (
+        ExportArguments,
+        "一致导出到项目外的新目录，排除秘密/运行态/半文件。",
+        False,
+        False,
+    ),
+    "restore_project": (
+        RestoreArguments,
+        "校验备份后在project_root新目录恢复新UUID，暂停且禁用目标。",
+        False,
+        False,
+    ),
     "execute_cleanup": (
         ExecuteCleanupArguments,
         "按固定清单复核引用和指纹后物理删除副本；同命令返回原回执。",
@@ -613,6 +635,8 @@ class ProjectBridge:
             return {"initialized": True, **read_project(root).summary()}
         if name == "init_project":
             return initialize_project(root).summary()
+        if name == "restore_project":
+            return restore_project(Path(arguments.bundle_path), root)
         if isinstance(arguments, StartArguments):
             project = load_project(root)
             port = arguments.port if arguments.port is not None else project.config.server.port
@@ -668,7 +692,7 @@ class ProjectBridge:
         self, project: Project, runtime: RuntimeRecord, method: str, path: str, data: dict
     ) -> dict:
         timeout = data["timeout_seconds"] + 3 if path == "/api/events/wait" else 3
-        if path.startswith("/api/cleanup"):
+        if path.startswith(("/api/cleanup", "/api/backup")):
             timeout = 300
         connection = HTTPConnection("127.0.0.1", runtime.port, timeout=timeout)
         try:
@@ -747,7 +771,7 @@ def create_server() -> Server:
                     output_schema=ToolResponse.model_json_schema(),
                     annotations=ToolAnnotations(
                         read_only_hint=read_only,
-                        destructive_hint=name == "stop_service",
+                        destructive_hint=name in {"stop_service", "execute_cleanup"},
                         idempotent_hint=idempotent,
                         open_world_hint=False,
                     ),
@@ -776,7 +800,8 @@ def create_server() -> Server:
                 ok=False,
                 error=ToolError(
                     code="project_unavailable",
-                    message="项目无法读取或写入，请检查目录权限、配置和数据库完整性。",
+                    message="项目无法读写，请检查空间、权限和配置；"
+                    "疑似库损坏时停止平台、保留现场并用完整备份恢复到新目录。",
                 ),
             )
         payload = result.model_dump(exclude_none=True)

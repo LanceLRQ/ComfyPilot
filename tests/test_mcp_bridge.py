@@ -12,6 +12,8 @@ from comfypilot.project import initialize_project, resolve_project_root
 from mcp import Client, StdioServerParameters
 
 TOOLS = {
+    "export_project",
+    "restore_project",
     "execute_cleanup",
     "list_cleanup",
     "inspect_storage",

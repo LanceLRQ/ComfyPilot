@@ -248,6 +248,30 @@ def migrate_database(project: Project) -> None:
             "INSERT OR IGNORE INTO project (project_id, root, created_at) VALUES (?, ?, ?)",
             (project_id, str(project.root), project.identity.created_at.isoformat()),
         )
+        saved_root = db.execute(
+            "SELECT root FROM project WHERE project_id=?", (project_id,)
+        ).fetchone()[0]
+        if saved_root != str(project.root):
+            from comfypilot.runtime import RuntimeRecord
+
+            path = project.root / ".comfypilot/runtime.json"
+            if path.exists():
+                old = RuntimeRecord.model_validate_json(path.read_text())
+                for identity in (old.api, old.worker):
+                    if identity and psutil.pid_exists(identity.pid):
+                        process = psutil.Process(identity.pid)
+                        if (
+                            process.create_time() == identity.started_at
+                            and process.exe() == identity.executable
+                        ):
+                            raise ProjectError(
+                                "service_busy",
+                                "移动目录前请先停止原项目服务；当前进程仍存活，保留运行记录。",
+                            )
+                path.rename(path.with_name(f"runtime.moved.{uuid4()}.json"))
+            db.execute(
+                "UPDATE project SET root=? WHERE project_id=?", (str(project.root), project_id)
+            )
         if version < 2:
             columns = {row[1] for row in db.execute("PRAGMA table_info(worker_status)")}
             if "instance_id" not in columns:
@@ -380,6 +404,12 @@ def set_dispatch(project: Project, *, paused: bool, reason: str) -> None:
 
 def read_project(root: Path) -> Project:
     state = root / ".comfypilot"
+    if (state / "transfer.incomplete").exists() or (
+        (root / "manifest.json").exists() and not (state / "locks").is_dir()
+    ):
+        raise ProjectError(
+            "backup_incomplete", "此目录为备份或未完成的传输；请保留证据并恢复到新的项目目录。"
+        )
     if not all(
         (root / name).is_file()
         for name in ["comfypilot.yaml", ".comfypilot/project.json", ".comfypilot/state.sqlite"]
