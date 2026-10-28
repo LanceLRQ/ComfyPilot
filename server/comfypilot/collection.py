@@ -32,27 +32,32 @@ def initialize_collection_schema(db: sqlite3.Connection) -> None:
 
 def list_versions(project: Project) -> dict:
     with closing(sqlite3.connect(project.database)) as db:
-        return {
-            "versions": [
-                json.loads(row[0])
-                for row in db.execute(
-                    "SELECT document FROM output_versions ORDER BY rowid DESC LIMIT 100"
-                )
-            ],
-            "collections": [
-                {
-                    "run_id": row[0],
-                    **json.loads(row[1]).get(
-                        "collection",
-                        {"phase": "failed" if row[2] == "failed" else "waiting_output"},
-                    ),
-                }
-                for row in db.execute(
-                    "SELECT id,document,status FROM execution_runs "
-                    "WHERE status IN ('collecting','failed') ORDER BY rowid LIMIT 50"
-                )
-            ],
-        }
+        db.execute("BEGIN")
+        return read_versions(db)
+
+
+def read_versions(db: sqlite3.Connection) -> dict:
+    return {
+        "versions": [
+            json.loads(row[0])
+            for row in db.execute(
+                "SELECT document FROM output_versions ORDER BY rowid DESC LIMIT 100"
+            )
+        ],
+        "collections": [
+            {
+                "run_id": row[0],
+                **json.loads(row[1]).get(
+                    "collection",
+                    {"phase": "failed" if row[2] == "failed" else "waiting_output"},
+                ),
+            }
+            for row in db.execute(
+                "SELECT id,document,status FROM execution_runs "
+                "WHERE status IN ('collecting','failed') ORDER BY rowid LIMIT 50"
+            )
+        ],
+    }
 
 
 def get_version(project: Project, version_id: str) -> dict:
@@ -140,7 +145,8 @@ async def collect_run(project: Project, run_id: str, *, now: datetime | None = N
             phase("transferring", staging_token=temporary.name)
 
             def progress(size):
-                phase("transferring", bytes_done=size)
+                checkpoint.update(bytes_done=size)
+                save_run(project, run_id, "collecting", {"collection": checkpoint}, durable=False)
 
             source_proof = await transfer_output(
                 project, final["target_snapshot"]["target"], replica, temporary, progress

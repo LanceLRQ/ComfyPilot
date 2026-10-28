@@ -1,42 +1,9 @@
-import { useEffect, useState } from "react";
-import { z } from "zod";
-
-const snapshot = z.object({
-  data: z.object({
-    collections: z.array(
-      z.object({
-        run_id: z.string(),
-        phase: z.string(),
-        bytes_done: z.number().optional(),
-        bytes_total: z.number().optional(),
-        error: z.object({ message: z.string() }).nullable().optional(),
-      }),
-    ),
-    versions: z.array(
-      z.object({
-        id: z.string().uuid(),
-        run_id: z.string(),
-        slot: z.string(),
-        kind: z.enum(["video", "image"]),
-        ready: z.boolean(),
-        content_hash: z.string(),
-        media: z.object({
-          width: z.number(),
-          height: z.number(),
-          frame_count: z.number().nullable(),
-        }),
-        checks: z.object({ status: z.string() }),
-      }),
-    ),
-  }),
-});
+import { useWorkspace } from "./Workspace";
 
 export function Versions() {
-  const [versions, setVersions] = useState<z.infer<typeof snapshot>["data"]["versions"]>([]);
-  const [error, setError] = useState(false);
-  const [collections, setCollections] = useState<z.infer<typeof snapshot>["data"]["collections"]>(
-    [],
-  );
+  const { snapshot, stale: error } = useWorkspace();
+  const versions = snapshot?.data.versions ?? [];
+  const collections = snapshot?.data.collections ?? [];
   const phases: Record<string, string> = {
     waiting_output: "等待输出",
     transferring: "传输中",
@@ -47,32 +14,6 @@ export function Versions() {
     retry_wait: "等待退避重试",
     failed: "检查失败",
   };
-  useEffect(() => {
-    const controller = new AbortController();
-    async function refresh() {
-      try {
-        const response = await fetch("/api/versions", {
-          cache: "no-store",
-          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(4000)]),
-        });
-        if (!response.ok) throw new Error("versions_unavailable");
-        const result = snapshot.parse(await response.json());
-        if (!controller.signal.aborted) {
-          setVersions(result.data.versions);
-          setCollections(result.data.collections);
-          setError(false);
-        }
-      } catch {
-        if (!controller.signal.aborted) setError(true);
-      }
-    }
-    void refresh();
-    const timer = window.setInterval(() => void refresh(), 3000);
-    return () => {
-      controller.abort();
-      window.clearInterval(timer);
-    };
-  }, []);
   return (
     <section className="settings-card" aria-labelledby="versions-title">
       <div className="section-heading">

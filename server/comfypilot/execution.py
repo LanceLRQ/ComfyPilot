@@ -145,21 +145,23 @@ def get_execution(project: Project) -> dict:
     with closing(sqlite3.connect(project.database.as_uri() + "?mode=ro", uri=True)) as db:
         db.row_factory = sqlite3.Row
         db.execute("BEGIN")
-        control = db.execute("SELECT * FROM execution_control").fetchone()
-        state = {"revision": control["revision"], "dispatch": dispatch_state(db)}
-        for name in ("tasks", "plans", "runs"):
-            rows = [
-                dict(row) for row in db.execute(f"SELECT * FROM execution_{name} ORDER BY rowid")
-            ]
-            for row in rows:
-                for key in ("document", "targets", "intent", "resources"):
-                    if row.get(key) is not None:
-                        row[key] = json.loads(row[key])
-            state[name] = rows
-        state["event_cursor"] = db.execute(
-            "SELECT COALESCE(MAX(event_id),0) FROM business_events"
-        ).fetchone()[0]
-        return state
+        return read_execution(db)
+
+
+def read_execution(db: sqlite3.Connection) -> dict:
+    control = db.execute("SELECT * FROM execution_control").fetchone()
+    state = {"revision": control["revision"], "dispatch": dispatch_state(db)}
+    for name in ("tasks", "plans", "runs"):
+        rows = [dict(row) for row in db.execute(f"SELECT * FROM execution_{name} ORDER BY rowid")]
+        for row in rows:
+            for key in ("document", "targets", "intent", "resources"):
+                if row.get(key) is not None:
+                    row[key] = json.loads(row[key])
+        state[name] = rows
+    state["event_cursor"] = db.execute(
+        "SELECT COALESCE(MAX(event_id),0) FROM business_events"
+    ).fetchone()[0]
+    return state
 
 
 def check_scope(plan: Plan) -> None:

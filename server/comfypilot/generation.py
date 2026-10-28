@@ -40,7 +40,13 @@ async def request_json(project: Project, target: dict, method: str, path: str, b
 
 
 def save_run(
-    project: Project, run_id: str, status: str, fields: dict, *, expected_status: str | None = None
+    project: Project,
+    run_id: str,
+    status: str,
+    fields: dict,
+    *,
+    expected_status: str | None = None,
+    durable: bool = True,
 ) -> None:
     with closing(sqlite3.connect(project.database, timeout=5)) as db, db:
         db.execute("BEGIN IMMEDIATE")
@@ -60,9 +66,10 @@ def save_run(
             "UPDATE execution_control SET reconciliation_required=EXISTS("
             "SELECT 1 FROM execution_runs WHERE status IN ('dispatching','reconciling'))"
         )
-        record_change(
-            db, "run_state", {"run_id": run_id, "status": status, **fields}, "worker", run_id
-        )
+        if durable:
+            record_change(
+                db, "run_state", {"run_id": run_id, "status": status, **fields}, "worker", run_id
+            )
 
 
 def queue_entries(document: dict) -> list[tuple[str, str, dict]]:

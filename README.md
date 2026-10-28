@@ -24,7 +24,7 @@ uv run --locked comfypilot init --project-root /absolute/path/to/project
 uv run --locked comfypilot start --project-root /absolute/path/to/project
 ```
 
-打开 <http://127.0.0.1:8765> 查看当前项目的名称、目录、UUID、数据格式和 Worker 心跳。页面每 5 秒读取一次实际状态。`start` 返回 JSON 状态后退出，API 和 Worker 在各自独立的后台会话中继续运行；同项目重复或并发启动复用一个实例。
+打开 <http://127.0.0.1:8765> 查看当前项目的名称、目录、UUID、数据格式和 Worker 心跳。项目与监测每 5 秒刷新，收片预览通过[业务事件与 SSE](docs/review-workbench.md)实时更新。`start` 返回 JSON 状态后退出，API 和 Worker 在各自独立的后台会话中继续运行；同项目重复或并发启动复用一个实例。
 
 ```sh
 uv run --locked comfypilot status --project-root /absolute/path/to/project

@@ -6,6 +6,7 @@ import { Monitor } from "./Monitor";
 import { Resources } from "./Resources";
 import { Settings } from "./Settings";
 import { Versions } from "./Versions";
+import { WorkspaceProvider } from "./Workspace";
 import "./style.css";
 
 const projectSchema = z.object({
@@ -177,8 +178,8 @@ function App() {
               <br />
               <em>确定的位置。</em>
             </h2>
-            <p>已支持项目配置、多个执行端与基础监测。生成与审片将在后续阶段接入。</p>
-            <span className="stage">当前阶段：项目与连接</span>
+            <p>已支持视频生成、自动收片与实时预览。你与 Agent 可以继续调整创作。</p>
+            <span className="stage">当前阶段：实时审片</span>
           </article>
         </section>
         <Monitor />
@@ -196,4 +197,9 @@ function App() {
 }
 
 const root = document.getElementById("root");
-if (root) createRoot(root).render(<App />);
+if (root)
+  createRoot(root).render(
+    <WorkspaceProvider>
+      <App />
+    </WorkspaceProvider>,
+  );

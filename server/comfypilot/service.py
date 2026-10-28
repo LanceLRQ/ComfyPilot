@@ -49,7 +49,11 @@ def run_service(
                 api=process_identity(os.getpid()),
             )
             server = uvicorn.Server(
-                uvicorn.Config(create_app(project, runtime), host="127.0.0.1", port=port)
+                uvicorn.Config(
+                    create_app(project, runtime, stopping=lambda: server.should_exit),
+                    host="127.0.0.1",
+                    port=port,
+                )
             )
             server.run(sockets=[listener])
 

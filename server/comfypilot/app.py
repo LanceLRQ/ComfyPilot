@@ -5,6 +5,7 @@ import sqlite3
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from contextlib import asynccontextmanager, closing, suppress
 from datetime import UTC, datetime
 from pathlib import Path
@@ -16,6 +17,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from comfypilot.events import install_event_routes
 from comfypilot.execution_api import install_execution_routes
 from comfypilot.media_api import install_media_routes
 from comfypilot.monitoring import get_target_status
@@ -43,7 +45,9 @@ class ProjectOverview(BaseModel):
     dispatch: dict[str, bool | str]
 
 
-def create_app(project: Project, runtime: RuntimeRecord) -> FastAPI:
+def create_app(
+    project: Project, runtime: RuntimeRecord, stopping: Callable[[], bool] | None = None
+) -> FastAPI:
     def spawn_worker() -> subprocess.Popen:
         process = subprocess.Popen(
             [
@@ -115,6 +119,7 @@ def create_app(project: Project, runtime: RuntimeRecord) -> FastAPI:
     install_execution_routes(app, project, runtime)
     install_resource_routes(app, project, runtime)
     install_media_routes(app, project, runtime)
+    install_event_routes(app, project, runtime, stopping)
 
     def worker_status() -> WorkerStatus:
         with closing(sqlite3.connect(project.database)) as db:
