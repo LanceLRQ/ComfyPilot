@@ -409,7 +409,7 @@ def test_execution_schema_has_real_constraints_and_monitoring_does_not_advance_b
         before["event_cursor"],
     )
     with sqlite3.connect(project.database) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 10
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 11
         columns = {row[1] for row in db.execute("PRAGMA table_info(execution_runs)")}
         assert columns == {"id", "plan_id", "action_index", "status", "document", "intent"}
         indices = {row[1] for row in db.execute("PRAGMA index_list(execution_runs)")}

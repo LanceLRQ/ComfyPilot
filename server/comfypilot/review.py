@@ -13,8 +13,11 @@ def get_review_version(project: Project, version_id: str) -> dict:
     version = get_version(project, version_id)
     with closing(sqlite3.connect(project.database)) as db:
         row = db.execute(
-            "SELECT document FROM execution_runs WHERE id=?", (version["run_id"],)
+            "SELECT r.document,p.task_id FROM execution_runs r "
+            "JOIN execution_plans p ON p.id=r.plan_id WHERE r.id=?",
+            (version["run_id"],),
         ).fetchone()
+    version["task_id"] = row[1]
     final = json.loads(row[0]).get("materialized", {})
     declaration = final.get("outputs", {}).get(version["slot"], {}).get("time_mapping")
     inputs = [
@@ -226,3 +229,227 @@ def apply_review_command(db: sqlite3.Connection, project: Project, command) -> t
         db.execute("SELECT review_hold FROM execution_control").fetchone()[0]
     )
     return result, item["id"]
+
+
+def initialize_decision_schema(db: sqlite3.Connection) -> None:
+    from comfypilot.recipes import content_hash
+
+    columns = {row[1] for row in db.execute("PRAGMA table_info(execution_plans)")}
+    for name in ("parent_plan_id", "authorization_id"):
+        if name not in columns:
+            db.execute(
+                f"ALTER TABLE execution_plans ADD COLUMN {name} TEXT REFERENCES execution_plans(id)"
+            )
+    roots = {}
+    previous = {}
+    for plan_id, task_id, document in db.execute(
+        "SELECT id,task_id,document FROM execution_plans ORDER BY rowid"
+    ).fetchall():
+        mandate = json.loads(document)["mandate"]
+        root = roots.setdefault((task_id, content_hash(mandate)), plan_id)
+        db.execute(
+            "UPDATE execution_plans SET parent_plan_id=?,authorization_id=? WHERE id=?",
+            (previous.get(task_id), root, plan_id),
+        )
+        previous[task_id] = plan_id
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS plan_feedback_links "
+        "(plan_id TEXT NOT NULL REFERENCES execution_plans(id), "
+        "feedback_id TEXT NOT NULL REFERENCES review_feedback(id), "
+        "PRIMARY KEY(plan_id,feedback_id))"
+    )
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS user_decisions (id TEXT PRIMARY KEY, "
+        "version_id TEXT NOT NULL REFERENCES output_versions(id), document TEXT NOT NULL)"
+    )
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS technical_evaluations (id TEXT PRIMARY KEY, "
+        "version_id TEXT NOT NULL REFERENCES output_versions(id), document TEXT NOT NULL)"
+    )
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS adopted_versions "
+        "(task_id TEXT NOT NULL REFERENCES execution_tasks(id), "
+        "segment_id TEXT NOT NULL, slot TEXT NOT NULL, "
+        "version_id TEXT NOT NULL REFERENCES output_versions(id), "
+        "decision_id TEXT NOT NULL REFERENCES user_decisions(id), "
+        "PRIMARY KEY(task_id,segment_id,slot))"
+    )
+
+
+def link_plan_feedback(db, plan_id, plan, source):
+    from datetime import UTC, datetime
+
+    from comfypilot.project import ProjectError
+
+    holds = {
+        row[0]
+        for row in db.execute(
+            "SELECT feedback_id FROM review_holds WHERE task_id=?", (plan.task_id,)
+        )
+    }
+    if holds - set(plan.feedback_ids):
+        raise ProjectError("review_hold", "请明确关联所有挂起反馈，或由用户验证后再生效修订。")
+    for feedback_id in set(plan.feedback_ids):
+        row = db.execute(
+            "SELECT document FROM review_feedback WHERE id=?", (feedback_id,)
+        ).fetchone()
+        item = json.loads(row[0])
+        db.execute("INSERT OR IGNORE INTO plan_feedback_links VALUES (?,?)", (plan_id, feedback_id))
+        if item["status"] != "verified":
+            item.update(status="addressed", addressed_by_plan_id=plan_id)
+            item["updates"].append(
+                {
+                    "status": "addressed",
+                    "plan_id": plan_id,
+                    "source": source,
+                    "created_at": datetime.now(UTC).isoformat(),
+                }
+            )
+            db.execute(
+                "UPDATE review_feedback SET status='addressed',document=? WHERE id=?",
+                (json.dumps(item), feedback_id),
+            )
+        db.execute("DELETE FROM review_holds WHERE feedback_id=?", (feedback_id,))
+    db.execute("UPDATE execution_control SET review_hold=EXISTS(SELECT 1 FROM review_holds)")
+
+
+def apply_decision_command(db, project, command):
+    from datetime import UTC, datetime
+    from uuid import uuid4
+
+    from comfypilot.collection import version_path
+    from comfypilot.execution import RecordEvaluation
+    from comfypilot.project import ProjectError
+    from comfypilot.recipes import content_hash
+
+    version = get_version(project, command.version_id)
+    record_id = str(uuid4())
+    now = datetime.now(UTC).isoformat()
+    if isinstance(command, RecordEvaluation):
+        document = {
+            "id": record_id,
+            "version_id": version["id"],
+            "text": command.text,
+            "source": command.source,
+            "created_at": now,
+        }
+        db.execute(
+            "INSERT INTO technical_evaluations VALUES (?,?,?)",
+            (record_id, version["id"], json.dumps(document)),
+        )
+        return {
+            "evaluation_id": record_id,
+            "version_id": version["id"],
+            "adopted": False,
+        }, record_id
+    if command.decision == "adopt" and (
+        not version["ready"] or version["checks"]["status"] != "passed"
+    ):
+        raise ProjectError("version_unqualified", "版本尚未通过必需技术检查，不能采用。")
+    if command.decision == "adopt":
+        version_path(project, version["id"], "original")
+    run = db.execute(
+        "SELECT plan_id,document FROM execution_runs WHERE id=?", (version["run_id"],)
+    ).fetchone()
+    task_id = db.execute(
+        "SELECT task_id FROM execution_plans WHERE id=?", (run["plan_id"],)
+    ).fetchone()[0]
+    step = json.loads(run["document"])["step"]
+    segment_id = (
+        step.get("segment_id") or step["asset_ids"].get("video") or content_hash(step["inputs"])
+    )
+    document = {
+        "id": record_id,
+        "version_id": version["id"],
+        "task_id": task_id,
+        "segment_id": segment_id,
+        "slot": version["slot"],
+        "decision": command.decision,
+        "source": command.source,
+        "user_statement": command.user_statement,
+        "created_at": now,
+    }
+    db.execute(
+        "INSERT INTO user_decisions VALUES (?,?,?)",
+        (record_id, version["id"], json.dumps(document)),
+    )
+    if command.decision == "adopt":
+        db.execute(
+            "INSERT INTO adopted_versions VALUES (?,?,?,?,?) ON CONFLICT(task_id,segment_id,slot) "
+            "DO UPDATE SET version_id=excluded.version_id,decision_id=excluded.decision_id",
+            (task_id, segment_id, version["slot"], version["id"], record_id),
+        )
+    else:
+        db.execute(
+            "DELETE FROM adopted_versions "
+            "WHERE task_id=? AND segment_id=? AND slot=? AND version_id=?",
+            (task_id, segment_id, version["slot"], version["id"]),
+        )
+    return {
+        "decision_id": record_id,
+        "version_id": version["id"],
+        "decision": command.decision,
+        "segment_id": segment_id,
+    }, record_id
+
+
+def read_decisions(db):
+    return {
+        "adoptions": [dict(row) for row in db.execute("SELECT * FROM adopted_versions")],
+        "decisions": [
+            json.loads(row[0])
+            for row in db.execute(
+                "SELECT document FROM user_decisions ORDER BY rowid DESC LIMIT 100"
+            )
+        ],
+        "evaluations": [
+            json.loads(row[0])
+            for row in db.execute(
+                "SELECT document FROM technical_evaluations ORDER BY rowid DESC LIMIT 100"
+            )
+        ],
+    }
+
+
+def delivery_manifest(project: Project) -> dict:
+    from comfypilot.collection import version_path
+    from comfypilot.project import ProjectError
+
+    with closing(sqlite3.connect(project.database)) as db:
+        db.row_factory = sqlite3.Row
+        db.execute("BEGIN")
+        rows = db.execute(
+            "SELECT a.*, v.document AS version, d.document AS decision "
+            "FROM adopted_versions a JOIN output_versions v ON v.id=a.version_id "
+            "JOIN user_decisions d ON d.id=a.decision_id ORDER BY a.task_id,a.segment_id,a.slot"
+        ).fetchall()
+    items = []
+    for row in rows:
+        version, decision = json.loads(row["version"]), json.loads(row["decision"])
+        if not version["ready"] or version["checks"]["status"] != "passed":
+            raise ProjectError(
+                "delivery_blocked", "采用版本的技术状态不可用，请先核对，不交付未验证媒体。"
+            )
+        version_path(project, version["id"], "original")
+        items.append(
+            {
+                "task_id": row["task_id"],
+                "segment_id": row["segment_id"],
+                "slot": row["slot"],
+                "version_id": version["id"],
+                "decision_id": row["decision_id"],
+                "source": decision["source"],
+                "user_statement": decision["user_statement"],
+                "content_hash": version["content_hash"],
+                "size": version["size"],
+                "filename": version["filename"],
+                "media": version["media"],
+                "provenance": version["source"],
+                "url": f"/api/versions/{version['id']}/content?variant=original",
+            }
+        )
+    return {
+        "project_id": str(project.identity.project_id),
+        "items": items,
+        "requires_user_adoption": True,
+    }

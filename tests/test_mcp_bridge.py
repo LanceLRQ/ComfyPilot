@@ -12,6 +12,9 @@ from comfypilot.project import initialize_project, resolve_project_root
 from mcp import Client, StdioServerParameters
 
 TOOLS = {
+    "record_user_decision",
+    "record_evaluation",
+    "get_delivery_manifest",
     "save_feedback",
     "update_feedback",
     "list_review_items",

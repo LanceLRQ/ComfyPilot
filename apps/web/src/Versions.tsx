@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
+import { Decisions, Delivery } from "./Decisions";
 import { Feedback } from "./Feedback";
 import { useWorkspace, workspaceSchema } from "./Workspace";
 
@@ -17,6 +18,14 @@ const detailSchema = z.object({
   }),
 });
 export type Version = z.infer<typeof versionSchema>;
+
+function clipKey(version: Version) {
+  const segment =
+    version.source.segment_id ??
+    version.source.inputs.find((item) => item.slot === "video")?.asset_id ??
+    version.run_id;
+  return `${version.task_id}:${segment}:${version.slot}`;
+}
 
 function ReviewPlayer({
   version,
@@ -162,20 +171,20 @@ export function Versions() {
   const [choices, setChoices] = useState<Record<string, string>>({});
   const groups = new Map<string, Version[]>();
   for (const version of versions.filter((item) => item.ready)) {
-    const key = `${version.source.inputs.find((item) => item.slot === "video")?.asset_id ?? version.run_id}:${version.slot}`;
+    const key = clipKey(version);
     groups.set(key, [...(groups.get(key) ?? []), version]);
   }
   useEffect(() => {
     if (!snapshot) return;
     const first = snapshot.data.versions.find((item) => item.ready);
     if (first) {
-      const key = `${first.source.inputs.find((item) => item.slot === "video")?.asset_id ?? first.run_id}:${first.slot}`;
+      const key = clipKey(first);
       setClip((previous) => previous || key);
     }
     setChoices((previous) => {
       const next = { ...previous };
       for (const version of snapshot.data.versions.filter((item) => item.ready)) {
-        const key = `${version.source.inputs.find((item) => item.slot === "video")?.asset_id ?? version.run_id}:${version.slot}`;
+        const key = clipKey(version);
         if (!next[key]) next[key] = version.id;
       }
       return next;
@@ -252,13 +261,14 @@ export function Versions() {
               </select>
             </label>
             <ReviewPlayer key={selected.id} version={selected} candidate={candidate} />
+            <Decisions version={selected} />
             <Feedback
               version={selected}
               video={candidate}
               onLocate={(id, time) => {
                 const version = versions.find((item) => item.id === id);
                 if (!version) return;
-                const key = `${version.source.inputs.find((item) => item.slot === "video")?.asset_id ?? version.run_id}:${version.slot}`;
+                const key = clipKey(version);
                 setClip(key);
                 setChoices((previous) => ({ ...previous, [key]: id }));
                 window.setTimeout(() => {
@@ -269,6 +279,7 @@ export function Versions() {
           </div>
         )}
       </div>
+      <Delivery />
     </section>
   );
 }

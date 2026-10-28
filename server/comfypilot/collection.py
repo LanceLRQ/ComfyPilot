@@ -37,13 +37,15 @@ def list_versions(project: Project) -> dict:
 
 
 def read_versions(db: sqlite3.Connection) -> dict:
+    versions = []
+    for row in db.execute(
+        "SELECT v.document,p.task_id FROM output_versions v "
+        "JOIN execution_runs r ON r.id=v.run_id JOIN execution_plans p ON p.id=r.plan_id "
+        "ORDER BY v.rowid DESC LIMIT 100"
+    ):
+        versions.append({**json.loads(row[0]), "task_id": row[1]})
     return {
-        "versions": [
-            json.loads(row[0])
-            for row in db.execute(
-                "SELECT document FROM output_versions ORDER BY rowid DESC LIMIT 100"
-            )
-        ],
+        "versions": versions,
         "collections": [
             {
                 "run_id": row[0],
@@ -256,6 +258,7 @@ async def collect_run(project: Project, run_id: str, *, now: datetime | None = N
                 "proxy": proxy,
                 "ready": True,
                 "source": {
+                    "segment_id": document["step"].get("segment_id"),
                     "inputs": [
                         {**item, "source": get_asset(project, item["asset_id"])["source"]}
                         for item in final["inputs"]

@@ -44,7 +44,7 @@ def review_workspace(generation_workspace):
     for step in body["steps"]:
         step.update(asset_ids={"video": asset["id"]}, inputs={"video": asset["content_hash"]})
     body["mandate"]["allowed_inputs"] = {"video": asset["content_hash"]}
-    plan = command(project, "create_plan", **body)["result"]["plan_id"]
+    plan = command(project, "create_plan", **body, new_instruction=True)["result"]["plan_id"]
     command(project, "activate_plan", plan_id=plan)
     queued = command(project, "execute_plan", plan_id=plan, action_indices=[0, 1])
     run_id, _ = completed(generation_workspace, queued["result"]["run_ids"][0])

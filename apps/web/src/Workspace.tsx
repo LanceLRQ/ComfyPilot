@@ -35,6 +35,27 @@ export const workspaceSchema = z.object({
     revision: z.number().int(),
     event_cursor: z.number().int(),
     feedback: z.array(feedbackSchema),
+    adoptions: z.array(
+      z.object({
+        task_id: z.string(),
+        segment_id: z.string(),
+        slot: z.string(),
+        version_id: z.string(),
+        decision_id: z.string(),
+      }),
+    ),
+    decisions: z.array(
+      z.object({
+        id: z.string(),
+        version_id: z.string(),
+        decision: z.enum(["adopt", "reject"]),
+        source: z.string(),
+        user_statement: z.string(),
+      }),
+    ),
+    evaluations: z.array(
+      z.object({ id: z.string(), version_id: z.string(), text: z.string(), source: z.string() }),
+    ),
     collections: z.array(
       z.object({
         run_id: z.string(),
@@ -47,6 +68,7 @@ export const workspaceSchema = z.object({
     versions: z.array(
       z.object({
         id: z.string().uuid(),
+        task_id: z.string(),
         run_id: z.string(),
         slot: z.string(),
         kind: z.enum(["video", "image"]),
@@ -60,6 +82,7 @@ export const workspaceSchema = z.object({
         checks: z.object({ status: z.string() }),
         created_at: z.string(),
         source: z.object({
+          segment_id: z.string().nullable().optional(),
           graph_hash: z.string(),
           prompt_id: z.string(),
           inputs: z.array(z.object({ slot: z.string(), asset_id: z.string() })),

@@ -25,6 +25,7 @@ class StrictModel(BaseModel):
 
 
 class Step(StrictModel):
+    segment_id: Identifier | None = Field(default=None, exclude_if=lambda value: value is None)
     recipe_id: Identifier
     recipe_hash: ContentHash
     inputs: dict[Identifier, ContentHash] = Field(min_length=1, max_length=32)
@@ -49,6 +50,9 @@ class Plan(StrictModel):
     task_id: Identifier
     steps: list[Step] = Field(min_length=1, max_length=100)
     mandate: ExecutionMandate
+    feedback_ids: list[Identifier] = Field(
+        default_factory=list, max_length=100, exclude_if=lambda value: not value
+    )
 
 
 class Command(StrictModel):
@@ -65,6 +69,7 @@ class CreateTask(Command):
 
 class CreatePlan(Command, Plan):
     action: Literal["create_plan"] = "create_plan"
+    new_instruction: bool = Field(default=False, exclude_if=lambda value: not value)
 
 
 class ActivatePlan(Command):
@@ -128,6 +133,19 @@ class UpdateFeedback(Command):
     user_statement: str | None = Field(default=None, min_length=1, max_length=4000, pattern=r"\S")
 
 
+class RecordUserDecision(Command):
+    action: Literal["record_user_decision"] = "record_user_decision"
+    version_id: Identifier
+    decision: Literal["adopt", "reject"]
+    user_statement: str = Field(min_length=1, max_length=4000, pattern=r"\S")
+
+
+class RecordEvaluation(Command):
+    action: Literal["record_evaluation"] = "record_evaluation"
+    version_id: Identifier
+    text: str = Field(min_length=1, max_length=4000, pattern=r"\S")
+
+
 AnyCommand = (
     CreateTask
     | CreatePlan
@@ -139,6 +157,8 @@ AnyCommand = (
     | ResumeCollection
     | SaveFeedback
     | UpdateFeedback
+    | RecordUserDecision
+    | RecordEvaluation
 )
 COMMAND_SCHEMA = TypeAdapter(Annotated[AnyCommand, Field(discriminator="action")])
 
@@ -246,6 +266,59 @@ def record_change(db, action: str, result: dict, source: str, object_id: str | N
     return {"revision": revision, "event_id": event_id, "result": result}
 
 
+def authorization_usage(db: sqlite3.Connection, plan_id: str) -> dict:
+    root_id = db.execute(
+        "SELECT authorization_id FROM execution_plans WHERE id=?", (plan_id,)
+    ).fetchone()[0]
+    _, root = load_plan(db, root_id)
+    used = db.execute(
+        "SELECT COALESCE(SUM(used_submissions),0) FROM execution_plans WHERE authorization_id=?",
+        (root_id,),
+    ).fetchone()[0]
+    queued = db.execute(
+        "SELECT COUNT(*) FROM execution_runs r JOIN execution_plans p ON p.id=r.plan_id "
+        "WHERE p.authorization_id=? AND r.status='queued' AND r.intent IS NULL",
+        (root_id,),
+    ).fetchone()[0]
+    return {
+        "authorization_id": root_id,
+        "max_submissions": root.mandate.max_submissions,
+        "used_submissions": used,
+        "queued_submissions": queued,
+        "remaining_submissions": max(0, root.mandate.max_submissions - used - queued),
+    }
+
+
+def check_mandate_reuse(original: ExecutionMandate, proposed: ExecutionMandate) -> None:
+    if (
+        original.instruction != proposed.instruction
+        or original.source != proposed.source
+        or proposed.max_submissions > original.max_submissions
+        or not set(proposed.allowed_targets).issubset(original.allowed_targets)
+        or not set(original.stop_conditions).issubset(proposed.stop_conditions)
+        or any(
+            original.allowed_recipes.get(key) != value
+            for key, value in proposed.allowed_recipes.items()
+        )
+        or any(
+            original.allowed_inputs.get(key) != value
+            for key, value in proposed.allowed_inputs.items()
+        )
+        or any(
+            not any(
+                type(value) is type(allowed) and value == allowed
+                for allowed in original.allowed_parameters.get(key, [])
+            )
+            for key, values in proposed.allowed_parameters.items()
+            for value in values
+        )
+    ):
+        raise ProjectError(
+            "new_instruction_required",
+            "扩大或改变用户指示需要明确的新指示；沿用时可在原范围内收窄。",
+        )
+
+
 def apply_command(project: Project, command: AnyCommand) -> dict:
     fingerprint = sha256(
         json.dumps(command.model_dump(exclude={"expected_revision"}), sort_keys=True).encode()
@@ -275,12 +348,40 @@ def apply_command(project: Project, command: AnyCommand) -> dict:
             )
             result = {"task_id": object_id}
         elif isinstance(command, CreatePlan):
-            plan = Plan(task_id=command.task_id, steps=command.steps, mandate=command.mandate)
+            steps = [
+                step
+                if step.segment_id
+                else step.model_copy(
+                    update={"segment_id": step.asset_ids.get("video") or content_hash(step.inputs)}
+                )
+                for step in command.steps
+            ]
+            plan = Plan(
+                task_id=command.task_id,
+                steps=steps,
+                mandate=command.mandate,
+                feedback_ids=command.feedback_ids,
+            )
             check_scope(plan)
             if not db.execute(
                 "SELECT id FROM execution_tasks WHERE id=?", (command.task_id,)
             ).fetchone():
                 raise ProjectError("task_unavailable", "任务不存在，请重新读取当前项目。")
+            parent = db.execute(
+                "SELECT p.id,p.document,p.authorization_id FROM execution_plans p "
+                "JOIN execution_tasks t ON t.id=p.task_id WHERE p.task_id=? "
+                "ORDER BY (p.id=t.active_plan_id) DESC,p.rowid DESC LIMIT 1",
+                (command.task_id,),
+            ).fetchone()
+            if parent and not command.new_instruction:
+                _, original = load_plan(db, parent["authorization_id"])
+                check_mandate_reuse(original.mandate, plan.mandate)
+            for feedback_id in plan.feedback_ids:
+                feedback = db.execute(
+                    "SELECT task_id FROM review_feedback WHERE id=?", (feedback_id,)
+                ).fetchone()
+                if not feedback or feedback[0] != plan.task_id:
+                    raise ProjectError("feedback_mismatch", "关联反馈必须属于当前任务。")
             targets = {
                 step.target_id: resolve_target(project, step.target_id) for step in plan.steps
             }
@@ -308,18 +409,29 @@ def apply_command(project: Project, command: AnyCommand) -> dict:
                     )
                 resources[str(index)] = frozen
             object_id = str(uuid4())
+            authorization_id = (
+                parent["authorization_id"] if parent and not command.new_instruction else object_id
+            )
             db.execute(
-                "INSERT INTO execution_plans(id,task_id,status,document,targets,resources) "
-                "VALUES (?,?,'draft',?,?,?)",
+                "INSERT INTO execution_plans(id,task_id,status,document,targets,resources,"
+                "parent_plan_id,authorization_id) "
+                "VALUES (?,?,'draft',?,?,?,?,?)",
                 (
                     object_id,
                     command.task_id,
                     plan.model_dump_json(),
                     json.dumps(targets),
                     json.dumps(resources),
+                    parent["id"] if parent else None,
+                    authorization_id,
                 ),
             )
-            result = {"plan_id": object_id, "status": "draft"}
+            result = {
+                "plan_id": object_id,
+                "status": "draft",
+                "authorization_id": authorization_id,
+                "new_instruction": command.new_instruction,
+            }
         elif isinstance(command, (ActivatePlan, StopPlan, ExecutePlan)):
             row, plan = load_plan(db, command.plan_id)
             object_id = command.plan_id
@@ -327,6 +439,9 @@ def apply_command(project: Project, command: AnyCommand) -> dict:
                 if row["status"] != "draft":
                     raise ProjectError("plan_unavailable", "只有草稿方案可以显式生效。")
                 check_targets(project, json.loads(row["targets"]))
+                from comfypilot.review import link_plan_feedback
+
+                link_plan_feedback(db, command.plan_id, plan, command.source)
                 db.execute(
                     "UPDATE execution_runs SET status='cancelled' WHERE "
                     "status='queued' AND intent IS NULL "
@@ -384,11 +499,15 @@ def apply_command(project: Project, command: AnyCommand) -> dict:
                         (command.plan_id,),
                     )
                 }
+                usage = authorization_usage(db, command.plan_id)
+                added = sum(index not in existing for index in indices)
                 if (
-                    len(existing) + sum(index not in existing for index in indices)
-                    > plan.mandate.max_submissions
+                    added > usage["remaining_submissions"]
+                    or len(existing) + added > plan.mandate.max_submissions
                 ):
-                    raise ProjectError("mandate_exceeded", "本方案已达到允许的生成次数。")
+                    raise ProjectError(
+                        "mandate_exceeded", "同一用户指示跨修订的生成次数/额度不足。"
+                    )
                 for index in indices:
                     if index not in existing:
                         existing[index] = str(uuid4())
@@ -411,6 +530,10 @@ def apply_command(project: Project, command: AnyCommand) -> dict:
                     "plan_id": command.plan_id,
                     "run_ids": [existing[index] for index in indices],
                 }
+        elif isinstance(command, (RecordUserDecision, RecordEvaluation)):
+            from comfypilot.review import apply_decision_command
+
+            result, object_id = apply_decision_command(db, project, command)
         elif isinstance(command, (SaveFeedback, UpdateFeedback)):
             from comfypilot.review import apply_review_command
 
@@ -505,13 +628,18 @@ def reserve_submission(
             "('dispatching','submitted','running','reconciling')"
         ).fetchone():
             raise ProjectError("dispatch_busy", "项目已有在途生成，串行等待。")
-        if row["used_submissions"] >= plan.mandate.max_submissions:
+        usage = authorization_usage(db, run["plan_id"])
+        if (
+            usage["used_submissions"] >= usage["max_submissions"]
+            or row["used_submissions"] >= plan.mandate.max_submissions
+        ):
             raise ProjectError("mandate_exceeded", "提交额度已耗尽；不明提交仍占用额度。")
         if (
             "on_failure" in plan.mandate.stop_conditions
             and db.execute(
-                "SELECT id FROM execution_runs WHERE plan_id=? AND status='failed'",
-                (run["plan_id"],),
+                "SELECT r.id FROM execution_runs r JOIN execution_plans p ON p.id=r.plan_id "
+                "WHERE p.authorization_id=? AND r.status='failed'",
+                (usage["authorization_id"],),
             ).fetchone()
         ):
             raise ProjectError("dispatch_paused", "用户指示在失败后停止，请重新取得执行指示。")

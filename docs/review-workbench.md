@@ -15,3 +15,10 @@
 “需要修改”只在版本属于当前有效方案时，和关联任务的 review_hold 同事务保存；其他任务继续执行，已写 intent 的运行继续对账和收片。普通备注和旧方案的反馈不会挂起当前方案；普通恢复派发不会解除审片挂起。Agent 标记 addressed 只表示已处理，仍需用户明确 verified；网页“确认此反馈已解决”或有用户原话的对话代录会记录验证来源。未提交草稿按版本保留在当前页面会话中；修订冲突时保留文字、截图和圈选，用户核对后可用当前修订重试。
 
 接口：`GET /api/review/items?unresolved=true|false`，截图上传/读取位于 `/api/review/screenshots`；写反馈与状态通过统一的 `/api/execution/command`。MCP `save_feedback`、`update_feedback`、`list_review_items` 使用相同应用用例、修订和幂等回执，不直接操作数据库。
+
+
+返工通过 `create_plan` 创建同任务的新修订，使用 `feedback_ids` 显式关联反馈；只有该修订生效才将关联反馈记为 addressed 并解除对应挂起。原反馈的方案、版本及原 Run/回执保持不变。需要沿用同一逻辑片段（包括更换素材）的候选时，步骤使用原 `segment_id`；未指定时默认视频资产身份。不同任务的候选分开管理。
+
+沿用原用户指示时，各修订共享 `authorization_id`、累计提交次数和失败停止条件，不能通过重建方案重置额度。指示可收窄；改变指示、扩大素材/目标/配方/参数或增加次数，必须取得明确新用户指示并设置 `new_instruction: true`。该字段是 Agent 对已取得指示的记录，不是自动授权机制。
+
+网页“通过并采用当前候选”保存明确用户决定；对话代录使用 MCP `record_user_decision`，必须带用户原话 `user_statement`。`record_evaluation` 单独记录 Agent 技术评价，不产生采用。采用位置按任务、逻辑片段和输出槽确定；新候选失败不会清除旧采用引用。只有技术检查合格且原件可读的已采用版本进入 `get_delivery_manifest` / `GET /api/review/delivery`，包含原片、输入、目标、图/内容哈希和决定来源。首版交付片段及 JSON 来源清单，不做自动拼接。

@@ -11,7 +11,7 @@ from fastapi.responses import StreamingResponse
 from comfypilot.collection import read_versions
 from comfypilot.execution import read_execution
 from comfypilot.project import Project, ProjectError
-from comfypilot.review import read_review_items
+from comfypilot.review import read_decisions, read_review_items
 from comfypilot.runtime import RuntimeRecord
 
 
@@ -22,6 +22,7 @@ def state_snapshot(project: Project) -> dict:
         state = read_execution(db)
         state.update(read_versions(db))
         state.update(read_review_items(db, unresolved=False))
+        state.update(read_decisions(db))
     for plan in state["plans"]:
         plan.pop("resources", None)
         plan.pop("targets", None)

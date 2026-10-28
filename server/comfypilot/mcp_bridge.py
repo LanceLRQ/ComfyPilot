@@ -17,6 +17,8 @@ from comfypilot.execution import (
     CreateTask,
     ExecutePlan,
     PauseDispatch,
+    RecordEvaluation,
+    RecordUserDecision,
     ResumeCollection,
     ResumeDispatch,
     SaveFeedback,
@@ -151,6 +153,14 @@ class UpdateFeedbackArguments(ConnectionArguments, UpdateFeedback):
     pass
 
 
+class UserDecisionArguments(ConnectionArguments, RecordUserDecision):
+    pass
+
+
+class EvaluationArguments(ConnectionArguments, RecordEvaluation):
+    pass
+
+
 class ToolError(BaseModel):
     code: str
     message: str
@@ -170,6 +180,7 @@ class ApplicationReply(BaseModel):
 
 
 PROJECT_API = {
+    "get_delivery_manifest": ("GET", "/api/review/delivery"),
     "list_review_items": ("GET", "/api/review/items"),
     "list_versions": ("GET", "/api/versions"),
     "list_replicas": ("GET", "/api/assets/replicas"),
@@ -195,6 +206,8 @@ PROJECT_API = {
             "resume_collection",
             "save_feedback",
             "update_feedback",
+            "record_user_decision",
+            "record_evaluation",
         )
     },
     "get_execution": ("GET", "/api/execution"),
@@ -212,6 +225,24 @@ PROJECT_API = {
 
 # 仅定义静态协议元数据；不得在此探测项目、服务或 ComfyUI。
 TOOL_DEFINITIONS = {
+    "record_user_decision": (
+        UserDecisionArguments,
+        "仅代录用户明确采用/拒绝，必须保留用户原话；Agent技术评价不得当作用户决定。",
+        False,
+        False,
+    ),
+    "record_evaluation": (
+        EvaluationArguments,
+        "单独保存Agent技术评价，不产生用户采用关系。",
+        False,
+        False,
+    ),
+    "get_delivery_manifest": (
+        ConnectionArguments,
+        "只读取用户明确采用且技术合格的片段与来源交付清单。",
+        True,
+        True,
+    ),
     "list_review_items": (
         ConnectionArguments,
         "读取未解决的版本反馈及截图引用，addressed不等于用户verified。",

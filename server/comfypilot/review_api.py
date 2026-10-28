@@ -7,14 +7,14 @@ from typing import Annotated
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from comfypilot.collection import get_version
 from comfypilot.media import ImportStream, media_directory
 from comfypilot.media_tools import inspect_media, require_tools
 from comfypilot.project import Project, ProjectError
-from comfypilot.review import list_review_items
+from comfypilot.review import delivery_manifest, list_review_items
 from comfypilot.runtime import RuntimeRecord
 
 
@@ -35,6 +35,15 @@ def install_review_routes(app: FastAPI, project: Project, runtime: RuntimeRecord
     @app.get("/api/review/items")
     def items(unresolved: bool = True):
         return reply(list_review_items(project, unresolved))
+
+    @app.get("/api/review/delivery")
+    def delivery(download: bool = False):
+        return JSONResponse(
+            reply(delivery_manifest(project)),
+            headers={"Content-Disposition": 'attachment; filename="comfypilot-delivery.json"'}
+            if download
+            else None,
+        )
 
     @app.post("/api/review/screenshots")
     async def upload(request: Request, metadata: Annotated[ScreenshotMetadata, Query()]):
