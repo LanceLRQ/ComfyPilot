@@ -66,6 +66,7 @@ def install_settings_routes(app: FastAPI, project: Project, runtime: RuntimeReco
         if (
             request.url.path.startswith(
                 (
+                    "/api/cleanup",
                     "/api/config",
                     "/api/targets",
                     "/api/execution",

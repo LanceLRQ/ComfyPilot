@@ -113,7 +113,7 @@ def test_local_replicas_are_scoped_fingerprinted_and_do_not_adopt_unknown_files(
     )
     assert outside["managed"] is False and outside["cleanup_eligible"] is False
     with sqlite3.connect(project.database) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 12
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 13
         assert {row[1] for row in db.execute("PRAGMA table_info(asset_references)")} == {
             "owner_id",
             "replica_id",

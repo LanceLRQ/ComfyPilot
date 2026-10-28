@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from comfypilot.cleanup_api import install_cleanup_routes
 from comfypilot.events import install_event_routes
 from comfypilot.execution_api import install_execution_routes
 from comfypilot.media_api import install_media_routes
@@ -122,6 +123,7 @@ def create_app(
     install_resource_routes(app, project, runtime)
     install_media_routes(app, project, runtime)
     install_review_routes(app, project, runtime)
+    install_cleanup_routes(app, project, runtime)
 
     def worker_status() -> WorkerStatus:
         with closing(sqlite3.connect(project.database)) as db:

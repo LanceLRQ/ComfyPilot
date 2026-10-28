@@ -11,6 +11,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import CallToolResult, ListToolsResult, TextContent, Tool, ToolAnnotations
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from comfypilot.cleanup import CleanupScope, PrepareCleanup
 from comfypilot.events import EventsRequest, WaitEventsRequest
 from comfypilot.execution import (
     ActivatePlan,
@@ -64,6 +65,14 @@ class ConnectionArguments(ProjectArguments):
     connection_ref: str | None = Field(
         default=None, min_length=1, description="本 MCP 进程 connect_service 返回的连接引用。"
     )
+
+
+class StorageArguments(ConnectionArguments, CleanupScope):
+    pass
+
+
+class PrepareCleanupArguments(ConnectionArguments, PrepareCleanup):
+    pass
 
 
 class DisconnectArguments(ConnectionArguments):
@@ -209,6 +218,8 @@ class ApplicationReply(BaseModel):
 
 
 PROJECT_API = {
+    "inspect_storage": ("POST", "/api/cleanup/inspect"),
+    "prepare_cleanup": ("POST", "/api/cleanup/prepare"),
     "get_context": ("GET", "/api/context"),
     "read_events": ("POST", "/api/events/read"),
     "wait_for_events": ("POST", "/api/events/wait"),
@@ -265,6 +276,18 @@ PROJECT_API = {
 
 # 仅定义静态协议元数据；不得在此探测项目、服务或 ComfyUI。
 TOOL_DEFINITIONS = {
+    "inspect_storage": (
+        StorageArguments,
+        "只盘点指定目标本项目登记副本、占用与引用保护；不删除。",
+        True,
+        True,
+    ),
+    "prepare_cleanup": (
+        PrepareCleanupArguments,
+        "按用户范围保存指纹固定的清理预览；不删除。",
+        False,
+        False,
+    ),
     "get_context": (
         ConnectionArguments,
         "新会话读取事实、剩余额度、有效方案、反馈、能力缺项与引用；不依赖历史对话。",
@@ -632,6 +655,8 @@ class ProjectBridge:
         self, project: Project, runtime: RuntimeRecord, method: str, path: str, data: dict
     ) -> dict:
         timeout = data["timeout_seconds"] + 3 if path == "/api/events/wait" else 3
+        if path.startswith("/api/cleanup"):
+            timeout = 300
         connection = HTTPConnection("127.0.0.1", runtime.port, timeout=timeout)
         try:
             connection.request(

@@ -12,6 +12,8 @@ from comfypilot.project import initialize_project, resolve_project_root
 from mcp import Client, StdioServerParameters
 
 TOOLS = {
+    "inspect_storage",
+    "prepare_cleanup",
     "get_context",
     "read_events",
     "wait_for_events",
