@@ -13,18 +13,22 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from comfypilot.execution import (
     ActivatePlan,
+    CancelQueuedRuns,
     CreatePlan,
     CreateTask,
     ExecutePlan,
     PauseDispatch,
+    PausePlan,
     RecordEvaluation,
     RecordUserDecision,
     ResumeCollection,
     ResumeDispatch,
+    ResumePlan,
     SaveFeedback,
     StopPlan,
     UpdateFeedback,
 )
+from comfypilot.execution_api import RunRequest
 from comfypilot.lifecycle import inspect_service, start_service, stop_service
 from comfypilot.media import AssetRequest, ExtractClipRequest, ImportAssetRequest, MediaJobRequest
 from comfypilot.project import (
@@ -133,6 +137,22 @@ class StopPlanArguments(ConnectionArguments, StopPlan):
     pass
 
 
+class PausePlanArguments(ConnectionArguments, PausePlan):
+    pass
+
+
+class ResumePlanArguments(ConnectionArguments, ResumePlan):
+    pass
+
+
+class CancelRunsArguments(ConnectionArguments, CancelQueuedRuns):
+    pass
+
+
+class RunArguments(ConnectionArguments, RunRequest):
+    pass
+
+
 class PauseArguments(ConnectionArguments, PauseDispatch):
     pass
 
@@ -180,6 +200,11 @@ class ApplicationReply(BaseModel):
 
 
 PROJECT_API = {
+    "get_system_status": ("GET", "/api/state"),
+    "list_runs": ("GET", "/api/execution/runs"),
+    "get_run": ("POST", "/api/execution/run"),
+    "get_collection_status": ("GET", "/api/execution/collections"),
+    "propose_plan": ("POST", "/api/execution/command"),
     "get_delivery_manifest": ("GET", "/api/review/delivery"),
     "list_review_items": ("GET", "/api/review/items"),
     "list_versions": ("GET", "/api/versions"),
@@ -202,6 +227,9 @@ PROJECT_API = {
             "execute_plan",
             "stop_plan",
             "pause_dispatch",
+            "pause_plan",
+            "resume_plan",
+            "cancel_queued_runs",
             "resume_dispatch",
             "resume_collection",
             "save_feedback",
@@ -225,6 +253,39 @@ PROJECT_API = {
 
 # 仅定义静态协议元数据；不得在此探测项目、服务或 ComfyUI。
 TOOL_DEFINITIONS = {
+    "get_system_status": (
+        ConnectionArguments,
+        "读取与网页相同的业务修订、游标、监测和审片状态。",
+        True,
+        True,
+    ),
+    "list_runs": (ConnectionArguments, "读取项目运行摘要；完整图和原始证据独立访问。", True, True),
+    "get_run": (RunArguments, "按身份读取运行摘要，不改变提交和收片。", True, True),
+    "get_collection_status": (
+        ConnectionArguments,
+        "读取收片阶段、字节与阻塞原因，不重新生成。",
+        True,
+        True,
+    ),
+    "pause_plan": (
+        PausePlanArguments,
+        "暂停有效方案后续派发；保留在途对账、收片和其他任务。",
+        False,
+        False,
+    ),
+    "resume_plan": (ResumePlanArguments, "只解除方案手动暂停；保留其他门禁与额度。", False, False),
+    "cancel_queued_runs": (
+        CancelRunsArguments,
+        "原子取消指定方案内的明确运行，仅queued且无intent可取消。",
+        False,
+        False,
+    ),
+    "propose_plan": (
+        CreatePlanArguments,
+        "提出新方案修订，继承授权额度；扩大范围需明确新用户指示。",
+        False,
+        False,
+    ),
     "record_user_decision": (
         UserDecisionArguments,
         "仅代录用户明确采用/拒绝，必须保留用户原话；Agent技术评价不得当作用户决定。",

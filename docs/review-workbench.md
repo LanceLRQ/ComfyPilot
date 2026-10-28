@@ -26,3 +26,8 @@
 生产监控位于审片播放器侧栏，可折叠平台/Worker、活动运行与收片、各执行端卡片。底部显示项目队列、手动暂停/审片挂起/待核对原因和最近20条业务活动。监控、候选和反馈共享 `/api/state` 与 SSE，刷新不切换用户选择，也不重建播放器或清空批注草稿。
 
 健康采样间隔5秒、有效期15秒；来源、采集/过期时间及缺项原因可展开查看。平台磁盘空间来自项目所在文件系统，远程 ComfyUI 磁盘空间不因此推断。执行端缺节点回调时只显示最近阶段、自提交意图起的耗时及未知原因；模型加载没有独立回调则不声称能够识别它，也不以静默触发重投。断线保留最后快照并标记可能过期，高级主机指标缺失不会按零或正常显示。监控投影不传完整节点 schema/目录，完整资源由独立查询读取。
+
+
+MCP 工作控制与网页共用业务修订、游标和命令用例：`get_system_status` 读取共享快照，`list_runs/get_run` 读取运行摘要，`get_collection_status` 读取收片。`pause_plan/resume_plan(plan_id)` 控制有效方案后续派发，暂停随同任务新修订继承；项目 `pause_dispatch/resume_dispatch` 和方案暂停分别解除。`cancel_queued_runs(plan_id,run_ids)` 只取消明确指定且 queued、无 intent 的运行，任意一项不符合就整批拒绝。Worker 领取时在同一事务复查，取消与意图预留只有一方能成功。
+
+`propose_plan` 复用 `create_plan` 创建草稿，不自动生效；参数、素材、目标改变须新修订，旧在途记录不改写。控制回执包含 command_id、revision、event_id、result、受影响运行/步骤 `affected_steps` 与剩余门禁 `control`，重复命令返回原回执。暂停/取消都不调用 ComfyUI 全局中断；已有 intent 继续核对和收片，`resume_collection` 恢复原 Run 收片而不增加生成或额度。

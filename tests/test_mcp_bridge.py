@@ -12,6 +12,14 @@ from comfypilot.project import initialize_project, resolve_project_root
 from mcp import Client, StdioServerParameters
 
 TOOLS = {
+    "get_system_status",
+    "list_runs",
+    "get_run",
+    "get_collection_status",
+    "pause_plan",
+    "resume_plan",
+    "cancel_queued_runs",
+    "propose_plan",
     "record_user_decision",
     "record_evaluation",
     "get_delivery_manifest",

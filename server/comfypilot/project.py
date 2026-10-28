@@ -211,7 +211,7 @@ def migrate_database(project: Project) -> None:
         db.execute("PRAGMA journal_mode=WAL")
         db.execute("BEGIN IMMEDIATE")
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 11:
+        if version > 12:
             raise ProjectError("unsupported_schema", "数据库格式比当前程序更新，请使用对应版本。")
         db.execute(
             "CREATE TABLE IF NOT EXISTS project "
@@ -311,6 +311,12 @@ def migrate_database(project: Project) -> None:
 
             initialize_decision_schema(db)
             db.execute("PRAGMA user_version=11")
+        if version < 12:
+            db.execute(
+                "CREATE TABLE IF NOT EXISTS plan_pauses (plan_id TEXT PRIMARY KEY "
+                "REFERENCES execution_plans(id), source TEXT NOT NULL, created_at TEXT NOT NULL)"
+            )
+            db.execute("PRAGMA user_version=12")
 
 
 def read_dispatch(project: Project) -> dict[str, bool | str]:
@@ -353,7 +359,7 @@ def read_project(root: Path) -> Project:
     identity = ProjectIdentity.model_validate_json((state / "project.json").read_text("utf-8"))
     with closing(sqlite3.connect((state / "state.sqlite").as_uri() + "?mode=ro", uri=True)) as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 11:
+        if version > 12:
             raise ProjectError("unsupported_schema", "数据库格式比当前程序更新，请使用对应版本。")
         if version >= 3:
             row = db.execute(

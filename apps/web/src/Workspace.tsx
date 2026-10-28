@@ -34,6 +34,7 @@ export const workspaceSchema = z.object({
   instance_id: z.string().uuid(),
   data: z.object({
     monitoring: monitoringSchema,
+    paused_plan_ids: z.array(z.string()),
     tasks: z.array(
       z.object({ id: z.string(), active_plan_id: z.string().nullable(), goal: z.string() }),
     ),

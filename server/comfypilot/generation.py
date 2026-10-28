@@ -205,7 +205,9 @@ async def advance_generation(project: Project, instance: UUID, worker_pid: int) 
             (
                 run
                 for run in state["runs"]
-                if run["status"] == "queued" and run["plan_id"] not in held_plans
+                if run["status"] == "queued"
+                and run["plan_id"] not in held_plans
+                and run["plan_id"] not in state["paused_plan_ids"]
             ),
             None,
         )

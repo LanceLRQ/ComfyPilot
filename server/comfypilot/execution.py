@@ -88,6 +88,22 @@ class StopPlan(Command):
     plan_id: Identifier
 
 
+class PausePlan(Command):
+    action: Literal["pause_plan"] = "pause_plan"
+    plan_id: Identifier
+
+
+class ResumePlan(Command):
+    action: Literal["resume_plan"] = "resume_plan"
+    plan_id: Identifier
+
+
+class CancelQueuedRuns(Command):
+    action: Literal["cancel_queued_runs"] = "cancel_queued_runs"
+    plan_id: Identifier
+    run_ids: list[Identifier] = Field(min_length=1, max_length=100)
+
+
 class PauseDispatch(Command):
     action: Literal["pause_dispatch"] = "pause_dispatch"
 
@@ -159,6 +175,9 @@ AnyCommand = (
     | UpdateFeedback
     | RecordUserDecision
     | RecordEvaluation
+    | PausePlan
+    | ResumePlan
+    | CancelQueuedRuns
 )
 COMMAND_SCHEMA = TypeAdapter(Annotated[AnyCommand, Field(discriminator="action")])
 
@@ -216,6 +235,7 @@ def read_execution(db: sqlite3.Connection) -> dict:
         "SELECT COALESCE(MAX(event_id),0) FROM business_events"
     ).fetchone()[0]
     state["review_holds"] = [dict(row) for row in db.execute("SELECT * FROM review_holds")]
+    state["paused_plan_ids"] = [row[0] for row in db.execute("SELECT plan_id FROM plan_pauses")]
     return state
 
 
@@ -340,6 +360,7 @@ def apply_command(project: Project, command: AnyCommand) -> dict:
         if revision != command.expected_revision:
             raise ProjectError("conflict", "业务修订已变化，请保留草稿并重新读取。")
         object_id = None
+        affected_run_ids = []
         if isinstance(command, CreateTask):
             object_id = str(uuid4())
             db.execute(
@@ -442,11 +463,23 @@ def apply_command(project: Project, command: AnyCommand) -> dict:
                 from comfypilot.review import link_plan_feedback
 
                 link_plan_feedback(db, command.plan_id, plan, command.source)
-                db.execute(
+                cancelled = db.execute(
                     "UPDATE execution_runs SET status='cancelled' WHERE "
                     "status='queued' AND intent IS NULL "
                     "AND plan_id IN (SELECT id FROM execution_plans WHERE task_id=? "
-                    "AND status='active')",
+                    "AND status='active') RETURNING id",
+                    (plan.task_id,),
+                ).fetchall()
+                affected_run_ids = [item[0] for item in cancelled]
+                db.execute(
+                    "INSERT OR IGNORE INTO plan_pauses SELECT ?,q.source,q.created_at "
+                    "FROM plan_pauses q JOIN execution_plans p ON p.id=q.plan_id "
+                    "WHERE p.task_id=? AND p.status='active'",
+                    (command.plan_id, plan.task_id),
+                )
+                db.execute(
+                    "DELETE FROM plan_pauses WHERE plan_id IN "
+                    "(SELECT id FROM execution_plans WHERE task_id=? AND status='active')",
                     (plan.task_id,),
                 )
                 db.execute(
@@ -463,6 +496,7 @@ def apply_command(project: Project, command: AnyCommand) -> dict:
                 )
                 result = {"plan_id": command.plan_id, "status": "active"}
             elif isinstance(command, StopPlan):
+                db.execute("DELETE FROM plan_pauses WHERE plan_id=?", (command.plan_id,))
                 db.execute(
                     "UPDATE execution_plans SET status='stopped' WHERE id=?", (command.plan_id,)
                 )
@@ -480,6 +514,7 @@ def apply_command(project: Project, command: AnyCommand) -> dict:
                     "plan_id": command.plan_id,
                     "cancelled_run_ids": [item[0] for item in affected],
                 }
+                affected_run_ids = result["cancelled_run_ids"]
             else:
                 if row["status"] != "active":
                     raise ProjectError("plan_unavailable", "只能执行当前生效的方案。")
@@ -511,6 +546,7 @@ def apply_command(project: Project, command: AnyCommand) -> dict:
                 for index in indices:
                     if index not in existing:
                         existing[index] = str(uuid4())
+                        affected_run_ids.append(existing[index])
                         db.execute(
                             "INSERT INTO execution_runs VALUES (?,?,?,'queued',?,NULL)",
                             (
@@ -530,6 +566,46 @@ def apply_command(project: Project, command: AnyCommand) -> dict:
                     "plan_id": command.plan_id,
                     "run_ids": [existing[index] for index in indices],
                 }
+        elif isinstance(command, (PausePlan, ResumePlan, CancelQueuedRuns)):
+            row, _ = load_plan(db, command.plan_id)
+            object_id = command.plan_id
+            if isinstance(command, CancelQueuedRuns):
+                affected_run_ids = list(dict.fromkeys(command.run_ids))
+                for run_id in affected_run_ids:
+                    run = db.execute(
+                        "SELECT * FROM execution_runs WHERE id=?", (run_id,)
+                    ).fetchone()
+                    if not run or run["plan_id"] != command.plan_id:
+                        raise ProjectError("run_unavailable", "运行不属于指定方案。")
+                    if run["status"] != "queued" or run["intent"] is not None:
+                        raise ProjectError(
+                            "run_not_cancellable", "只能取消等待中且无提交意图的运行。"
+                        )
+                db.executemany(
+                    "UPDATE execution_runs SET status='cancelled' WHERE id=?",
+                    [(run_id,) for run_id in affected_run_ids],
+                )
+                result = {"plan_id": command.plan_id, "cancelled_run_ids": affected_run_ids}
+            else:
+                if row["status"] != "active":
+                    raise ProjectError("plan_unavailable", "只能暂停或恢复当前有效方案。")
+                paused = isinstance(command, PausePlan)
+                if paused:
+                    db.execute(
+                        "INSERT OR IGNORE INTO plan_pauses VALUES (?,?,?)",
+                        (command.plan_id, command.source, datetime.now(UTC).isoformat()),
+                    )
+                else:
+                    db.execute("DELETE FROM plan_pauses WHERE plan_id=?", (command.plan_id,))
+                affected_run_ids = [
+                    row[0]
+                    for row in db.execute(
+                        "SELECT id FROM execution_runs WHERE plan_id=? "
+                        "AND status='queued' AND intent IS NULL",
+                        (command.plan_id,),
+                    )
+                ]
+                result = {"plan_id": command.plan_id, "paused": paused}
         elif isinstance(command, (RecordUserDecision, RecordEvaluation)):
             from comfypilot.review import apply_decision_command
 
@@ -568,6 +644,7 @@ def apply_command(project: Project, command: AnyCommand) -> dict:
                 (json.dumps(document), command.run_id),
             )
             object_id = command.run_id
+            affected_run_ids = [command.run_id]
             result = {
                 "run_id": command.run_id,
                 "phase": "waiting_output",
@@ -584,11 +661,31 @@ def apply_command(project: Project, command: AnyCommand) -> dict:
                 ),
             )
             result = {"manual_pause": paused, "dispatch": dispatch_state(db)}
+            affected_run_ids = [
+                row[0]
+                for row in db.execute(
+                    "SELECT id FROM execution_runs WHERE status='queued' AND intent IS NULL"
+                )
+            ]
         receipt = {
             "command_id": command.command_id,
             "action": command.action,
             **record_change(db, command.action, result, command.source, object_id),
         }
+        receipt["affected_steps"] = [
+            {"run_id": row["id"], "plan_id": row["plan_id"], "action_index": row["action_index"]}
+            for run_id in affected_run_ids
+            for row in db.execute(
+                "SELECT id,plan_id,action_index FROM execution_runs WHERE id=?", (run_id,)
+            )
+        ]
+        receipt["control"] = {
+            "dispatch": dispatch_state(db),
+            "paused_plan_ids": [row[0] for row in db.execute("SELECT plan_id FROM plan_pauses")],
+            "review_holds": [dict(row) for row in db.execute("SELECT * FROM review_holds")],
+        }
+        if plan_id := result.get("plan_id"):
+            receipt["control"]["authorization"] = authorization_usage(db, plan_id)
         db.execute(
             "INSERT INTO command_receipts VALUES (?,?,?)",
             (command.command_id, fingerprint, json.dumps(receipt)),
@@ -611,6 +708,8 @@ def reserve_submission(
         row, plan = load_plan(db, run["plan_id"])
         if run["status"] != "queued" or row["status"] != "active":
             raise ProjectError("plan_unavailable", "运行或方案已停止，不能建立提交意图。")
+        if db.execute("SELECT 1 FROM plan_pauses WHERE plan_id=?", (run["plan_id"],)).fetchone():
+            raise ProjectError("dispatch_paused", "方案后续派发已暂停。")
         control = db.execute(
             "SELECT review_hold,reconciliation_required FROM execution_control"
         ).fetchone()

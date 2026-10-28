@@ -169,7 +169,7 @@ def test_new_config_tables_are_migrated_without_losing_project_data(project):
     migrated = load_project(project.root)
     assert migrated.identity == project.identity
     with sqlite3.connect(project.database) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 11
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 12
         assert db.execute("SELECT value FROM user_marker").fetchone()[0] == "keep-existing-data"
         columns = {row[1]: row[2] for row in db.execute("PRAGMA table_info(config_revisions)")}
         assert columns == {

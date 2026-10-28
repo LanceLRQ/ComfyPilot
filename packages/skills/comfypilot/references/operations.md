@@ -2,9 +2,9 @@
 
 ## 三种修订与命令回执
 
-配置写入采用 `get_project.revision`；资源刷新采用 `list_resources.revision`（初始 0）；业务命令采用 `get_execution.revision`。不能混用。资源内容无变化时刷新不增加修订。业务命令包括 create_task、create_plan、activate_plan、execute_plan、stop_plan、pause_dispatch、resume_dispatch 和 resume_collection。
+配置写入采用 `get_project.revision`；资源刷新采用 `list_resources.revision`（初始 0）；业务命令采用 `get_execution.revision`。不能混用。资源内容无变化时刷新不增加修订。业务命令包括方案、派发、收片恢复、反馈、用户决定及评价写入；控制也支持 pause_plan、resume_plan 和 cancel_queued_runs。
 
-每次新的业务操作生成 UUID 字符串作为 command_id，传 expected_revision；回执包含 command_id、revision、event_id 和 result。重复原操作重用同一个 ID 与原参数，取回原回执；同 ID 换请求返回 command_mismatch。网络超时不证明操作未执行，先查状态或按原 ID 重读回执，不换新 ID 重复创建。新命令冲突时保留草稿，读取状态并重新确认其仍符合用户意图。
+每次新的业务操作生成 UUID 字符串作为 command_id，传 expected_revision；回执包含 command_id、revision、event_id 和 result；控制还包含 affected_steps 与 control 中仍有效的暂停、审片挂起、待核对和授权额度。重复原操作重用同一个 ID 与原参数，取回原回执；同 ID 换请求返回 command_mismatch。网络超时不证明操作未执行，先查状态或按原 ID 重读回执，不换新 ID 重复创建。新命令冲突时保留草稿，读取状态并重新确认其仍符合用户意图。
 
 来源 agent/web_user 只是操作来源标签，不是可靠身份认证。
 
@@ -18,6 +18,9 @@
 | execute_plan | plan_id、action_indices | 幂等 Run ID；索引从 0 开始 |
 | stop_plan | plan_id | 取消未提交运行，保留在途意图 |
 | resume_collection | run_id、命令与业务修订 | 仅恢复已确认外部成功的blocked收片，原Run/原额度；failed不可恢复 |
+| pause_plan / resume_plan | plan_id、命令与业务修订 | 暂停后续派发；暂停随同任务新修订继承，恢复仅解除此方案开关 |
+| cancel_queued_runs | plan_id、明确 run_ids | 整批仅取消queued且无intent；混入已提交项整批拒绝 |
+| propose_plan | 同create_plan | 同一应用用例建立草稿，不自动生效 |
 | pause_dispatch / resume_dispatch | 命令与业务修订 | 修改 manual_pause，其他限制保留 |
 
 每个 step 明确 recipe_id、recipe_hash、inputs、asset_ids、parameters、target_id 和 required_nodes。recipe_hash 从已刷新配方记录读取，覆盖图、说明及关联资源，不是单独 API 文件哈希。inputs 是输入槽位到媒体 SHA-256 的映射，asset_ids 是同槽位到导入/提取后独立素材ID的映射；两者必须完整对应且类型、哈希一致；不要把可变文件路径当版本证据。所有输入和参数必须完整提供。required_nodes 必须与 API 图节点类型集合一致。
@@ -37,12 +40,21 @@ stop_conditions 支持 on_failure（失败后停止）与 after_limit；最大�
 ## 门禁与缺项
 
 - 草稿不暗中替换当前方案。参数、输入、配方或目标扩大范围时，先取得用户新的指示，再创建和生效新修订。
-- 同方案/action_index 只有一个 Run；不能靠新 command_id 重跑同一动作，另一次尝试需要明确的新指示与新方案。
+- 同方案/action_index 只有一个 Run；不能靠新 command_id 重跑同一动作，另一次尝试需要新方案且仍在原指示剩余额度内；扩大范围/次数需明确新指示。
 - 项目总生成并发为 1；内部预留意图会再检查所有暂停原因、次数、目标身份、fresh 的生成能力/节点和外部空队列。监测过期时等待或显式探测，不当作正常。
 - 目标改址或停用后旧方案不会偷偷换端。保存新方案前明确目标；旧在途记录始终保持原快照。
 - 内部 intent、额度和事件同事务。返回 reused 的原 intent 是待对账证据，不是再次发送许可。不明提交占用一次额度。
-- 实际生成消费与回执对账已接入。意图已存在时仅核对原目标、原prompt_id；丢失prompt_id时按项目/Run/意图标记匹配，不明状态保留并阻止新提交。只有history明确success且completed才进入collecting，节点完成不算成功。后台已自动收片，list_versions 返回当前收片阶段、字节/错误及已完整解码并通过配方规格检查的ready版本。非H.264/MP4视频会有独立检查的播放代理；原片和代理不能混淆。不同Run即使字节相同也是独立版本，不合并来源。当前没有清理、审片结论或事件流工具；不要调用设计文档中的未来工具，也不要编辑 SQLite 完成这些操作。
+- 实际生成消费与回执对账已接入。意图已存在时仅核对原目标、原prompt_id；丢失prompt_id时按项目/Run/意图标记匹配，不明状态保留并阻止新提交。只有history明确success且completed才进入collecting，节点完成不算成功。后台已自动收片，list_versions 返回当前收片阶段、字节/错误及已完整解码并通过配方规格检查的ready版本。非H.264/MP4视频会有独立检查的播放代理；原片和代理不能混淆。不同Run即使字节相同也是独立版本，不合并来源。当前支持反馈、技术评价、明确用户采用及来源清单；清理与MCP事件等待尚未交付；不要调用设计文档中的未来工具，也不要编辑 SQLite 完成这些操作。
 
 收片 checkpoint 保存阶段、已传字节、输出指纹、暂存token、尝试次数与下次时间。临时读取错误最多3次额外重试，耗尽后blocked；缺工具/空间直接blocked；媒体损坏或规格不符使Run.failed。按既有用户指示修复环境后使用resume_collection，首次恢复使用新的UUID command_id；同一次resume_collection请求回执丢失时才复用这次恢复的ID。原execute_plan及先前恢复轮次的command_id均不能拿来做新恢复，否则会command_mismatch或只返回旧回执。沿用的是run_id，不用execute_plan重跑。部分文件会从头重传，非通用字节续传；同名文件变化仍阻塞，不能借恢复覆盖旧指纹。
 
 远程素材配置assets.mode=bridge，comfypilot bridge-path返回完整扩展目录；只通过用户指定的管理通道安装，核对队列空闲后按原方式重启并probe_target验证。桥接仅允许项目命名空间下输入上传、声明输出下载、stat与known列表；没有shell、删除或任意主机控制。未安装unsupported、断线unknown，不自动切换目标。原Run输出依旧须完整传输/解码/配方检查后才可审。
+
+
+## 调整后续工作
+
+先用 get_system_status/list_runs/get_run/get_collection_status 回读同一项目的修订、门禁、运行与收片。用户要求暂停某方案时 pause_plan；暂停整个项目后续派发时 pause_dispatch。二者不停止监测、既有intent对账或收片；恢复只解除对应开关，不清review_hold、待核对或失败停止。取消须提供明确plan_id/run_ids；取消结果若为conflict或run_not_cancellable，重新读取，不改为全局清队列。
+
+返工用propose_plan/create_plan，feedback_ids明确关联需处理的反馈；沿用segment_id保持同片段候选归属。草稿不解除挂起，activate_plan后才标记关联反馈addressed；这不等于用户verified。沿用同一指示共享authorization_id、累计次数和失败停止条件；扩大目标/配方/素材/参数/次数必须先取得用户新原话，再设置new_instruction=true。
+
+用户明确通过才record_user_decision，保留user_statement与来源；Agent评价用record_evaluation，不能代用户采用。get_delivery_manifest只包含已采用且技术合格的片段与来源。截图、媒体通过引用读取，不在MCP中传base64。

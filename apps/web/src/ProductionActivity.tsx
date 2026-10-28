@@ -24,6 +24,7 @@ export function ProductionActivity() {
       <p className="settings-note">
         {data?.dispatch.manual_pause ? "已手动暂停后续派发" : "手动派发开关已打开"} ·{" "}
         {data?.dispatch.review_hold ? "部分任务等待审片处理" : "无审片挂起"} ·{" "}
+        {data?.paused_plan_ids.length ?? 0} 个方案手动暂停 ·{" "}
         {data?.dispatch.reconciliation_required ? "存在待核对提交" : "无待核对提交"}
       </p>
       <ul className="feedback-items">
