@@ -107,7 +107,7 @@ def start_service(project: Project, port: int) -> dict:
         with socket.socket() as listener:
             listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             try:
-                listener.bind(("127.0.0.1", port))
+                listener.bind((project.config.server.host, port))
                 listener.listen(128)
             except OSError as error:
                 raise ProjectError(

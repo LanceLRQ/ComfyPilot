@@ -10,6 +10,7 @@ import { WorkspaceProvider } from "./Workspace";
 import "./style.css";
 
 const projectSchema = z.object({
+  local_control: z.boolean().default(true),
   project_id: z.string().uuid(),
   root: z.string(),
   name: z.string(),
@@ -72,7 +73,7 @@ function App() {
           <span>ComfyPilot</span>
         </a>
         <span className="mode">
-          本机工作台
+          {project?.local_control === false ? "局域网审片" : "本机工作台"}
           <span className="mode-dot" />
         </span>
       </header>
@@ -101,7 +102,11 @@ function App() {
                 {error ? "服务连接中断" : project ? "项目服务已连接" : "正在连接本机服务"}
               </strong>
               <span className="connection-note">
-                {error ? "保留最后一次读取的数据" : "回环连接 · 无需登录"}
+                {error
+                  ? "保留最后一次读取的数据"
+                  : project?.local_control === false
+                    ? "局域网审片 · 无需登录"
+                    : "回环连接 · 无需登录"}
               </span>
             </div>
           </div>
@@ -116,7 +121,11 @@ function App() {
             <h2 id="workspace-title">当前工作目录</h2>
             <span>PROJECT ROOT</span>
           </div>
-          <div className="root-path">{project?.root ?? "等待项目数据…"}</div>
+          <div className="root-path">
+            {project?.local_control === false
+              ? "工作目录仅在本机显示"
+              : (project?.root ?? "等待项目数据…")}
+          </div>
           <div className="project-details">
             <div className="project-detail">
               <span className="label">项目标识</span>
@@ -182,13 +191,21 @@ function App() {
             <span className="stage">当前阶段：实时审片</span>
           </article>
         </section>
-        <Settings />
-        <Resources />
-        <Assets />
+        {project?.local_control && (
+          <>
+            <Settings />
+            <Resources />
+            <Assets />
+          </>
+        )}
         <Versions />
-        <Maintenance />
+        {project?.local_control && <Maintenance />}
         <footer>
-          <span>仅本机访问 · 所有项目数据保存在当前目录</span>
+          <span>
+            {project?.local_control === false
+              ? "LAN 审片 · 管理操作请使用本机 Agent"
+              : "本机控制 · 所有项目数据保存在当前目录"}
+          </span>
           <span>{updatedAt ? `更新于 ${updatedAt} · 每 5 秒刷新` : "正在读取…"}</span>
         </footer>
       </main>

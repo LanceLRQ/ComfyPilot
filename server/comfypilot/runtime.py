@@ -23,7 +23,7 @@ class RuntimeRecord(BaseModel):
     project_id: UUID
     root: str
     instance_id: UUID
-    host: Literal["127.0.0.1"] = "127.0.0.1"
+    host: Literal["127.0.0.1", "0.0.0.0"] = "127.0.0.1"
     port: int = Field(ge=1, le=65535)
     api: ProcessIdentity
     worker: ProcessIdentity | None = None

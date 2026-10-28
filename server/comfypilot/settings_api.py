@@ -3,6 +3,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from comfypilot.lan import local_control, review_route
 from comfypilot.monitoring import TargetMonitor, get_target_status, target_view
 from comfypilot.project import ExecutionTarget, Project, ProjectConfig, ProjectError
 from comfypilot.runtime import RuntimeRecord
@@ -63,30 +64,28 @@ def install_settings_routes(app: FastAPI, project: Project, runtime: RuntimeReco
 
     @app.middleware("http")
     async def control_boundary(request: Request, call_next):
-        if (
-            request.url.path.startswith(
-                (
-                    "/api/cleanup",
-                    "/api/config",
-                    "/api/targets",
-                    "/api/execution",
-                    "/api/resources",
-                    "/api/assets",
-                    "/api/review",
-                    "/api/events",
-                )
+        hosts = {f"127.0.0.1:{runtime.port}", f"localhost:{runtime.port}"}
+        if runtime.host == "0.0.0.0":
+            hosts.update(f"{host}:{runtime.port}" for host in project.config.server.lan_hosts)
+        host, origin = request.headers.get("host"), request.headers.get("origin")
+        if host not in hosts or (origin and origin != f"http://{host}"):
+            return reply(
+                error={
+                    "code": "control_forbidden",
+                    "message": "请求 Host 或 Origin 不在同源白名单。",
+                },
+                status=403,
             )
-            and request.method != "GET"
+        request.state.local_control = local_control(request)
+        path = request.url.path
+        if not request.state.local_control and (
+            path == "/health" or path.startswith("/api/") and not review_route(path, request.method)
         ):
-            origin = request.headers.get("origin")
-            hosts = {f"127.0.0.1:{runtime.port}", f"localhost:{runtime.port}"}
-            if request.headers.get("host") not in hosts or (
-                origin and origin not in {f"http://{host}" for host in hosts}
-            ):
-                return reply(
-                    error={"code": "control_forbidden", "message": "配置操作仅接受本机同源控制。"},
-                    status=403,
-                )
+            return reply(
+                error={"code": "control_forbidden", "message": "此接口仅限本机 Agent 或本机面板。"},
+                status=403,
+            )
+        if path.startswith("/api/") and request.method not in {"GET", "HEAD"}:
             if request.headers.get("x-comfypilot-instance") != str(runtime.instance_id):
                 return reply(
                     error={

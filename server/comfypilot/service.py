@@ -35,7 +35,7 @@ def run_service(
             if socket_fd is None:
                 listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 try:
-                    listener.bind(("127.0.0.1", port))
+                    listener.bind((project.config.server.host, port))
                     listener.listen(128)
                 except OSError as error:
                     raise ProjectError(
@@ -46,13 +46,15 @@ def run_service(
                 root=str(project.root),
                 instance_id=instance_id,
                 port=port,
+                host=project.config.server.host,
                 api=process_identity(os.getpid()),
             )
             server = uvicorn.Server(
                 uvicorn.Config(
                     create_app(project, runtime, stopping=lambda: server.should_exit),
-                    host="127.0.0.1",
+                    host=runtime.host,
                     port=port,
+                    proxy_headers=False,
                 )
             )
             server.run(sockets=[listener])

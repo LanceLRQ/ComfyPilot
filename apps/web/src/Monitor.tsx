@@ -134,13 +134,15 @@ export function Monitor() {
             <h3>
               {item.target_id} · {item.enabled ? "已启用" : "已停用"}
             </h3>
-            <button
-              type="button"
-              disabled={!item.enabled || probing !== null}
-              onClick={() => void probe(item.target_id)}
-            >
-              {probing === item.target_id ? "探测中…" : "重新探测能力"}
-            </button>
+            {snapshot?.data.local_control && (
+              <button
+                type="button"
+                disabled={!item.enabled || probing !== null}
+                onClick={() => void probe(item.target_id)}
+              >
+                {probing === item.target_id ? "探测中…" : "重新探测能力"}
+              </button>
+            )}
           </div>
           <p className="settings-note">
             {item.stage.value?.phase === "executing"

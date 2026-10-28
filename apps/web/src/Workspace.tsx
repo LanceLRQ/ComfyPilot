@@ -33,6 +33,7 @@ export const workspaceSchema = z.object({
   project_id: z.string().uuid(),
   instance_id: z.string().uuid(),
   data: z.object({
+    local_control: z.boolean().default(true),
     monitoring: monitoringSchema,
     paused_plan_ids: z.array(z.string()),
     tasks: z.array(

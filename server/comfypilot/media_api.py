@@ -6,6 +6,7 @@ from fastapi import FastAPI, Query, Request
 from fastapi.responses import FileResponse
 
 from comfypilot.collection import get_version, list_versions, version_path
+from comfypilot.lan import public_version
 from comfypilot.media import (
     CHUNK_BYTES,
     AssetRequest,
@@ -45,12 +46,18 @@ def install_media_routes(app: FastAPI, project: Project, runtime: RuntimeRecord)
         return reply(list_assets(project))
 
     @app.get("/api/versions")
-    def versions():
-        return reply(list_versions(project))
+    def versions(request: Request):
+        data = list_versions(project)
+        if not request.state.local_control:
+            data["versions"] = [public_version(x) for x in data["versions"]]
+        return reply(data)
 
     @app.get("/api/versions/{version_id}")
-    def review_version(version_id: UUID):
-        return reply(get_review_version(project, str(version_id)))
+    def review_version(request: Request, version_id: UUID):
+        data = get_review_version(project, str(version_id))
+        if not request.state.local_control:
+            data["version"] = public_version(data["version"])
+        return reply(data)
 
     @app.get("/api/versions/{version_id}/content")
     def version_content(version_id: UUID, variant: Literal["original", "preview"] = "preview"):

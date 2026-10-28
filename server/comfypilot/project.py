@@ -4,6 +4,7 @@ from contextlib import closing
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
+from ipaddress import IPv4Address
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit, urlunsplit
@@ -22,8 +23,24 @@ class ProjectError(Exception):
 
 class ServerConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    host: Literal["127.0.0.1"] = "127.0.0.1"
+    host: Literal["127.0.0.1", "0.0.0.0"] = "127.0.0.1"
     port: int = Field(default=8765, ge=1, le=65535)
+    lan_hosts: list[str] = Field(default_factory=list, max_length=16)
+
+    @field_validator("lan_hosts")
+    @classmethod
+    def ipv4_hosts(cls, values):
+        for value in values:
+            address = IPv4Address(value)
+            if address.is_unspecified or address.is_multicast:
+                raise ValueError("LAN 地址必须是实际接口的 IPv4 地址")
+        return values
+
+    @model_validator(mode="after")
+    def explicit_lan(self):
+        if self.host == "0.0.0.0" and not self.lan_hosts:
+            raise ValueError("开放 LAN 前请填写 server.lan_hosts 接口地址白名单")
+        return self
 
 
 class LocalAssets(BaseModel):

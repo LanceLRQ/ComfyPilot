@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from comfypilot.collection import read_versions
 from comfypilot.execution import authorization_usage, read_execution
+from comfypilot.lan import public_latest, public_state
 from comfypilot.project import Project, ProjectError
 from comfypilot.review import read_decisions, read_review_items
 from comfypilot.runtime import RuntimeRecord
@@ -107,8 +108,13 @@ def install_event_routes(
         }
 
     @app.get("/api/state")
-    def snapshot():
-        return reply({**state_snapshot(project), "monitoring": monitoring()})
+    def snapshot(request: Request):
+        state = {
+            **state_snapshot(project),
+            "monitoring": monitoring(),
+            "local_control": request.state.local_control,
+        }
+        return reply(state if request.state.local_control else public_state(state))
 
     @app.get("/api/context")
     def context():
@@ -145,6 +151,7 @@ def install_event_routes(
 
     @app.get("/api/events/stream")
     async def stream(
+        request: Request,
         after: int = Query(default=0, ge=0, le=2**63 - 1),
         last_event_id: Annotated[str | None, Header()] = None,
     ):
@@ -170,13 +177,10 @@ def install_event_routes(
                 if page["has_more"]:
                     continue
                 state = await asyncio.to_thread(state_snapshot, project)
-                yield (
-                    "event: latest\ndata: "
-                    + json.dumps(
-                        reply({"collections": state["collections"], "monitoring": monitoring()})
-                    )
-                    + "\n\n"
-                )
+                latest = {"collections": state["collections"], "monitoring": monitoring()}
+                if not request.state.local_control:
+                    latest = public_latest(latest)
+                yield ("event: latest\ndata: " + json.dumps(reply(latest)) + "\n\n")
                 await asyncio.sleep(1)
 
         return StreamingResponse(

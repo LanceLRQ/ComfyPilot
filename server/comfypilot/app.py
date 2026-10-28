@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Literal
 from uuid import UUID
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from comfypilot.cleanup_api import install_cleanup_routes
 from comfypilot.events import install_event_routes
 from comfypilot.execution_api import install_execution_routes
+from comfypilot.lan import public_monitor
 from comfypilot.media_api import install_media_routes
 from comfypilot.monitoring import get_target_status, metric, target_view
 from comfypilot.project import Project, read_dispatch, read_project, set_dispatch
@@ -154,13 +155,18 @@ def create_app(
         )
 
     @app.get("/api/project")
-    def overview() -> ProjectOverview:
-        return ProjectOverview(
+    def overview(request: Request):
+        result = ProjectOverview(
             **read_project(project.root).summary(),
             worker=worker_status(),
             instance_id=runtime.instance_id,
             dispatch=read_dispatch(project),
-        )
+        ).model_dump(mode="json")
+        result["local_control"] = request.state.local_control
+        if not request.state.local_control:
+            result["root"] = ""
+            result["worker"]["pid"] = None
+        return result
 
     monitored_at = 0.0
     monitored: dict = {}
@@ -196,11 +202,18 @@ def create_app(
     install_event_routes(app, project, runtime, stopping, monitor_view)
 
     @app.get("/api/status")
-    def monitoring():
+    def monitoring(request: Request):
         return {
             "project_id": str(project.identity.project_id),
             "instance_id": str(runtime.instance_id),
-            "data": {**monitor_view(), "dispatch": read_dispatch(project)},
+            "data": {
+                **(
+                    monitor_view()
+                    if request.state.local_control
+                    else public_monitor(monitor_view())
+                ),
+                "dispatch": read_dispatch(project),
+            },
         }
 
     web = Path(__file__).parent / "web"

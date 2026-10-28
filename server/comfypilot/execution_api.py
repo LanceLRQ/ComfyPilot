@@ -4,7 +4,8 @@ from contextlib import closing
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import Body, FastAPI
+from fastapi import Body, FastAPI, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 
 from comfypilot.events import state_snapshot
@@ -70,5 +71,19 @@ def install_execution_routes(app: FastAPI, project: Project, runtime: RuntimeRec
         return reply({"run_id": str(run_id), "kind": kind, "evidence": data})
 
     @app.post("/api/execution/command")
-    def command(body: Annotated[AnyCommand, Body(discriminator="action")]):
+    def command(request: Request, body: Annotated[AnyCommand, Body(discriminator="action")]):
+        if not request.state.local_control:
+            if body.action not in {"save_feedback", "update_feedback", "record_user_decision"} or (
+                body.action == "update_feedback" and body.status != "verified"
+            ):
+                return JSONResponse(
+                    {
+                        "error": {
+                            "code": "control_forbidden",
+                            "message": "LAN 只允许审片反馈和用户决定。",
+                        }
+                    },
+                    status_code=403,
+                )
+            body = body.model_copy(update={"source": "web_user"})
         return reply(apply_command(project, body))

@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from comfypilot.collection import get_version
+from comfypilot.lan import public_source
 from comfypilot.media import ImportStream, media_directory
 from comfypilot.media_tools import inspect_media, require_tools
 from comfypilot.project import Project, ProjectError
@@ -37,9 +38,13 @@ def install_review_routes(app: FastAPI, project: Project, runtime: RuntimeRecord
         return reply(list_review_items(project, unresolved))
 
     @app.get("/api/review/delivery")
-    def delivery(download: bool = False):
+    def delivery(request: Request, download: bool = False):
+        data = delivery_manifest(project)
+        if not request.state.local_control:
+            for item in data["items"]:
+                item["provenance"] = public_source(item["provenance"])
         return JSONResponse(
-            reply(delivery_manifest(project)),
+            reply(data),
             headers={"Content-Disposition": 'attachment; filename="comfypilot-delivery.json"'}
             if download
             else None,
