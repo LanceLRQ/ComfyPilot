@@ -21,6 +21,7 @@ from comfypilot.execution import (
     StopPlan,
 )
 from comfypilot.lifecycle import inspect_service, start_service, stop_service
+from comfypilot.media import AssetRequest, ExtractClipRequest, ImportAssetRequest, MediaJobRequest
 from comfypilot.project import (
     Project,
     ProjectError,
@@ -76,6 +77,22 @@ class ResourceFileArguments(ConnectionArguments, ResourceFileRequest):
 
 
 class PreflightArguments(ConnectionArguments, PreflightRequest):
+    pass
+
+
+class ImportAssetArguments(ConnectionArguments, ImportAssetRequest):
+    pass
+
+
+class ExtractClipArguments(ConnectionArguments, ExtractClipRequest):
+    pass
+
+
+class AssetArguments(ConnectionArguments, AssetRequest):
+    pass
+
+
+class MediaJobArguments(ConnectionArguments, MediaJobRequest):
     pass
 
 
@@ -138,6 +155,11 @@ class ApplicationReply(BaseModel):
 
 
 PROJECT_API = {
+    "list_assets": ("GET", "/api/assets"),
+    "get_asset": ("POST", "/api/assets/get"),
+    "get_media_job": ("POST", "/api/assets/jobs/get"),
+    "import_asset": ("POST", "/api/assets/import"),
+    "extract_clip": ("POST", "/api/assets/clips"),
     "list_resources": ("GET", "/api/resources"),
     "refresh_resources": ("POST", "/api/resources/refresh"),
     "get_resource_file": ("POST", "/api/resources/file"),
@@ -169,6 +191,31 @@ PROJECT_API = {
 
 # 仅定义静态协议元数据；不得在此探测项目、服务或 ComfyUI。
 TOOL_DEFINITIONS = {
+    "list_assets": (ConnectionArguments, "读取当前项目最近素材、媒体任务和导入限额。", True, True),
+    "get_asset": (
+        AssetArguments,
+        "读取独立素材身份、内容哈希、来源、媒体信息和片段映射。",
+        True,
+        True,
+    ),
+    "get_media_job": (
+        MediaJobArguments,
+        "按任务 ID 查询导入/提取状态；成功后才可使用素材。",
+        True,
+        True,
+    ),
+    "import_asset": (
+        ImportAssetArguments,
+        "从用户明确指定的本机绝对路径排队导入，后台流式复制并真实解码；重复调用创建独立身份。",
+        False,
+        False,
+    ),
+    "extract_clip": (
+        ExtractClipArguments,
+        "按显式起止范围排队提取工作片，保存原片映射及视频/参考图顺序，不向 ComfyUI 提交。",
+        False,
+        False,
+    ),
     "list_resources": (
         ConnectionArguments,
         "读取有效资源快照与独立目标预检记录，不扫描磁盘。",

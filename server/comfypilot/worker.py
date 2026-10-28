@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
+from comfypilot.media import run_media_jobs
 from comfypilot.monitoring import monitor_targets
 from comfypilot.project import Project, load_project, resolve_project_root
 from comfypilot.runtime import project_lock
@@ -25,6 +26,7 @@ def run_worker(project: Project, instance_id: UUID) -> None:
             try:
                 async with asyncio.TaskGroup() as group:
                     monitors = group.create_task(monitor_targets(project, instance_id))
+                    media = group.create_task(run_media_jobs(project))
                     while not stopped.is_set():
                         with db:
                             db.execute(
@@ -44,6 +46,7 @@ def run_worker(project: Project, instance_id: UUID) -> None:
                         with suppress(TimeoutError):
                             await asyncio.wait_for(stopped.wait(), timeout=5)
                     monitors.cancel()
+                    media.cancel()
             finally:
                 with db:
                     db.execute(

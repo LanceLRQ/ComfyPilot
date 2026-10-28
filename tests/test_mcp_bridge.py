@@ -12,6 +12,11 @@ from comfypilot.project import initialize_project, resolve_project_root
 from mcp import Client, StdioServerParameters
 
 TOOLS = {
+    "list_assets",
+    "get_asset",
+    "get_media_job",
+    "import_asset",
+    "extract_clip",
     "list_resources",
     "refresh_resources",
     "get_resource_file",

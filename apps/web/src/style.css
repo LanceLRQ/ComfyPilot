@@ -395,6 +395,36 @@ footer {
   gap: 12px;
   margin: 20px 0;
 }
+.media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 16px;
+}
+.media-grid article {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.media-grid video,
+.media-grid img {
+  display: block;
+  width: 100%;
+  max-height: 240px;
+  object-fit: contain;
+  margin: 14px 0;
+  background: #101512;
+}
+.media-details {
+  margin: 20px 0;
+}
+.media-details summary {
+  margin-bottom: 16px;
+  cursor: pointer;
+}
+.media-jobs {
+  padding-left: 20px;
+  font-size: 12px;
+  line-height: 2;
+}
 .resource-code {
   max-height: 420px;
   overflow: auto;

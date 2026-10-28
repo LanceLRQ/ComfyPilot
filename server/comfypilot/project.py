@@ -60,6 +60,13 @@ class ExecutionTarget(BaseModel):
         return urlunsplit((parsed.scheme, host, parsed.path.rstrip("/"), "", ""))
 
 
+class ImportLimits(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    video_bytes: int = Field(default=2 * 1024**3, ge=1, le=64 * 1024**3)
+    image_bytes: int = Field(default=50 * 1024**2, ge=1, le=1024**3)
+    workflow_bytes: int = Field(default=5 * 1024**2, ge=1, le=32 * 1024**2)
+
+
 class ProjectConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     schema_version: Literal[1] = 1
@@ -68,6 +75,7 @@ class ProjectConfig(BaseModel):
     targets: list[ExecutionTarget] = Field(default_factory=list, max_length=32)
     default_target_id: str | None = None
     resource_overrides: dict[str, str] = Field(default_factory=dict, max_length=1000)
+    import_limits: ImportLimits = Field(default_factory=ImportLimits)
 
     @model_validator(mode="after")
     def check_targets(self):
@@ -183,7 +191,7 @@ def migrate_database(project: Project) -> None:
         db.execute("PRAGMA journal_mode=WAL")
         db.execute("BEGIN IMMEDIATE")
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 6:
+        if version > 7:
             raise ProjectError("unsupported_schema", "数据库格式比当前程序更新，请使用对应版本。")
         db.execute(
             "CREATE TABLE IF NOT EXISTS project "
@@ -253,6 +261,11 @@ def migrate_database(project: Project) -> None:
 
             initialize_resource_schema(db)
             db.execute("PRAGMA user_version=6")
+        if version < 7:
+            from comfypilot.media import initialize_media_schema
+
+            initialize_media_schema(db)
+            db.execute("PRAGMA user_version=7")
 
 
 def read_dispatch(project: Project) -> dict[str, bool | str]:
@@ -295,7 +308,7 @@ def read_project(root: Path) -> Project:
     identity = ProjectIdentity.model_validate_json((state / "project.json").read_text("utf-8"))
     with closing(sqlite3.connect((state / "state.sqlite").as_uri() + "?mode=ro", uri=True)) as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 6:
+        if version > 7:
             raise ProjectError("unsupported_schema", "数据库格式比当前程序更新，请使用对应版本。")
         if version >= 3:
             row = db.execute(

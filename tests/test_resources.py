@@ -38,11 +38,23 @@ def test_refresh_discovers_sources_and_immutable_file_content_without_importing_
     assert get_resources(project)["revision"] == 1
     assert refresh_resources(project, 1)["revision"] == 2
     with sqlite3.connect(project.database) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 6
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 7
         assert {row[1] for row in db.execute("PRAGMA table_info(resource_blobs)")} == {
             "hash",
             "content",
         }
+
+
+def test_workflow_limit_uses_effective_project_configuration(tmp_path):
+    from comfypilot.resources import refresh_resources
+    from comfypilot.settings import get_project, update_project
+
+    project = initialize_project(tmp_path)
+    config = get_project(project)["config"]
+    config["import_limits"]["workflow_bytes"] = 1024
+    update_project(project, 1, config)
+    with pytest.raises(ProjectError, match="import_limits.workflow_bytes"):
+        refresh_resources(project, 0)
 
 
 @pytest.mark.parametrize("defect", ["canvas", "bad_link", "cycle", "missing_binding", "output"])

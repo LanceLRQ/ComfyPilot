@@ -474,3 +474,11 @@ SQLite 格式 6 新增 resource_blobs（SHA-256→文件字节）、resource_rev
 采集边界将标准 V3 COMBO、AUTOGROW 与 DYNAMICCOMBO 转为只含预检字段的 schema；预检按所选动态分支展开输入，其他动态类型保留未知，不执行目标代码。依赖预检仍按 recipe_hash + target_id 保存，核心提交/权重实际哈希仍 unknown。Agent 的环境安装记录在项目内按 target_id 隔离，当前不作为平台自动采信的安装状态。
 
 安装由 Agent 已配置的目标管理通道承担；只有 HTTP 时明确缺项，不回退全局目标/云 API。完整说明包含安装前队列检查、原环境保留、重启影响、验证和回退；真实安装/重启/回退、画布往返和完整生成仍待实测。交付与证据见 [H3 配方](h3-recipe.md)。
+
+### M2/2.3 实现边界
+
+SQLite 格式 7 新增 media_blobs、media_assets 和 media_jobs，分别记录内容哈希/大小、独立业务身份与媒体任务。旧配置修订按默认值补齐 import_limits，保留原数据。媒体字节位于项目 `.comfypilot/artifacts/inputs/<hash>`，不存 SQLite。导入先写 staging、计算哈希并真实解码，成功才登记素材；同内容去重字节，来源与身份分别保存。
+
+API 接收本机绝对路径或原始请求体分块上传，Worker 持久串行领取媒体任务，与监测/心跳并行，异步运行 ffprobe/FFmpeg。MCP 只提交和查询，不等待整个解码过程；退出客户端不取消任务。平台停止取消子进程；重启遗留 running 转 blocked，不自动重放。媒体准备不受生成派发暂停控制。
+
+显式范围先按第一视频帧归零、归一 CFR，再取半开帧范围；保存请求范围、原片 ID、实际时间映射及 video→reference 输入顺序。拒绝非网格起止和帧数不符，工作片无音轨，原片字节保留。网页提供上传/处理状态及输入预览，后续审片系统尚未交付。路径、限额、工具缺项和协议边界见 [素材操作说明](media-assets.md)。本轮不物化远端输入或最终生成图，不改变生成门禁和真实环境保留项。

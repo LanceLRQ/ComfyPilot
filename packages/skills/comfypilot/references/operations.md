@@ -23,7 +23,15 @@
 
 mandate 保存用户的 instruction 和 source，以及 allowed_recipes（配方 ID→哈希）、allowed_targets、allowed_inputs（输入 ID→哈希）、allowed_parameters（参数名→允许值列表）、max_submissions 和 stop_conditions。参数当前只支持明确候选值枚举，保留原值；不支持范围表达式。即使没有可调参数，也显式传 parameters 与 allowed_parameters 的空对象。
 
-stop_conditions 支持 on_failure（失败后停止）与 after_limit；最大次数始终是硬限制。方案最多 100 个步骤，最大提交次数 100；次数来自用户指示，不因软件允许 100 就自行提高。M2/2.1 已验证配方声明与冻结图模板；输入媒体本体尚待导入阶段验证。旧版方案没有资源快照时需重建，已有 intent 保留。
+stop_conditions 支持 on_failure（失败后停止）与 after_limit；最大次数始终是硬限制。方案最多 100 个步骤，最大提交次数 100；次数来自用户指示，不因软件允许 100 就自行提高。M2/2.1 已验证配方声明与冻结图模板；M2/2.3 提供本地媒体准备，但最终 ComfyUI 输入上传与图物化尚未实现。旧版方案没有资源快照时需重建，已有 intent 保留。
+
+## 本地媒体准备
+
+媒体任务不使用配置/业务 expected_revision 或 command_id。每次 import_asset/extract_clip 返回新任务，其 id 是 job_id；预分配 asset_id 在任务 succeeded 前不可用。get_media_job 读取 status/phase/error，成功后 get_asset 保存原片与参考图的身份、哈希、来源和媒体信息。list_assets 只列最近100素材/50任务，旧记录可按保存ID读取。
+
+例如用户指定原片1–3秒、24 FPS和一张人物参考图：分别 import_asset(video/image)，等两项 succeeded；extract_clip 传原片/参考图asset_id、start_seconds=1、end_seconds=3；成功后核对 time_map 为 first_video_frame/normalized_cfr、帧区间[24,72)、frame_count=48，input_order 为 video→reference。工作片无音轨，等比补边到指定偶数宽高。该48帧示例不满足H3固定124帧生成要求，不调用生成接口补齐。
+
+默认导入限额：视频2GiB、图片50MiB、工作流5MiB；通过有效项目配置 import_limits 修改。工作流仍走资源刷新，媒体存于独立受管目录。图片必须真实解码，视频完整检查；错误码区分超限、路径、缺工具、空间、损坏或中断。修改原文件不影响成功导入副本；处理中修改原件则拒绝。
 
 ## 门禁与缺项
 

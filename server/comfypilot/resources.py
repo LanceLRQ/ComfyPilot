@@ -73,6 +73,7 @@ def get_resource_file(project: Project, resource_hash: str) -> dict:
 
 
 def scan_files(project: Project) -> tuple[dict, dict]:
+    file_limit = get_project(project)["config"]["import_limits"]["workflow_bytes"]
     preset_root = Path(__file__).parent / "presets"
     if not preset_root.exists():
         preset_root = Path(__file__).parents[2] / "presets"
@@ -111,17 +112,14 @@ def scan_files(project: Project) -> tuple[dict, dict]:
                     if name.startswith(".") or name.endswith((".pyc", ".tmp", ".bak")):
                         continue
                     path = Path(parent) / name
-                    if not path.is_file() or path.stat().st_size > 5 * 1024 * 1024:
+                    if not path.is_file() or path.stat().st_size > file_limit:
                         raise ProjectError(
-                            "resource_limit", "资源仅接受普通文件，单文件最多 5 MiB。"
+                            "resource_limit",
+                            "资源仅接受普通文件，单文件受 import_limits.workflow_bytes 限制。",
                         )
                     content = path.read_bytes()
                     size += len(content)
-                    if (
-                        len(content) > 5 * 1024 * 1024
-                        or size > 32 * 1024 * 1024
-                        or len(files) >= 1000
-                    ):
+                    if len(content) > file_limit or size > 32 * 1024 * 1024 or len(files) >= 1000:
                         raise ProjectError(
                             "resource_limit", "资源刷新最多 1000 个文件、合计 32 MiB。"
                         )

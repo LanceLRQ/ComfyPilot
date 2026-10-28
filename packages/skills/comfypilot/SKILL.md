@@ -31,9 +31,17 @@ description: 在用户指定的本地创作目录，通过 ComfyPilot MCP 管理
 ## 发现资源与准备配方
 
 1. `list_resources` 读取有效资源修订；首次为 0，不隐式扫描。修改资源文件后调用 `refresh_resources(expected_revision)`。文件引用是项目根相对路径；同名冲突用配置 `resource_overrides` 显式选择来源后再刷新，失败时保留原快照。
-2. 用 `get_resource_file(resource_hash)` 查看快照原件和说明。画布不能直接执行；Recipe 必须独立提供 API 图、输入/参数绑定、输出规则与完整模块/节点声明。内置人物替换当前只有模块声明，真实配方仍待交付。
+2. 用 `get_resource_file(resource_hash)` 查看快照原件和说明。画布不能直接执行；Recipe 必须独立提供 API 图、输入/参数绑定、输出规则与完整模块/节点声明。内置 H3 人物替换配方为 `minimax-h3-replacement`，按其说明检查固定规格、依赖与目标能力。
 3. 选择目标并 `probe_target` 后调用 `preflight_recipe(recipe_id, target_id)`。缺节点、未知、定义不匹配、标准预检通过分别处理。预检 15 秒内有效，过期重新探测；不能据此声称节点固定版本已验证、实际安装完成或真实生成通过。
-4. 创建方案时从有效资源快照取得 recipe_hash，完整提供所有输入与参数，required_nodes 对应实际 API 图。平台冻结参数化图模板、配方和关联文件哈希，刷新磁盘不会改写旧方案/Run。输入媒体上传与最终图物化尚未接入。
+4. 创建方案时从有效资源快照取得 recipe_hash，完整提供所有输入与参数，required_nodes 对应实际 API 图。平台冻结参数化图模板、配方和关联文件哈希，刷新磁盘不会改写旧方案/Run。本地素材准备已接入，上传 ComfyUI 与最终生成图物化尚未接入。
+
+## 导入素材与提取显式片段
+
+1. `list_assets` 读取最近素材、媒体任务与 import_limits；用户给出平台所在机器的普通文件绝对路径后，用 `import_asset(source_path, kind)` 导入 video/image。网页也可上传原始文件，MCP 不传 base64。缺 ffmpeg/ffprobe 时说明安装并加入平台 PATH；不因此尝试远端上传。
+2. 保存返回 job_id 和预分配 asset_id，用 `get_media_job(job_id)` 查询。queued/running 只代表排队/处理中，只有 succeeded/ready 后才用 `get_asset(asset_id)` 的哈希和媒体信息。媒体身份与资源快照是独立体系，不调用 get_resource_file 读取视频。任务没有 command_id 幂等语义，回执丢失先 list_assets 查已存在任务，不盲目重提。
+3. 起止范围必须由用户明确指定；缺范围先询问，不自动选镜头。`extract_clip(source_asset_id,start_seconds,end_seconds,reference_asset_id?)` 从原片提取半开范围，可绑定一张已导入参考图。默认24 FPS、768×448，起止须对齐输出 FPS 帧网格；非网格范围请用户明确选定，不暗中取整。工作片无音轨，原片字节保留；H3 另有124帧等要求，普通片段不等于满足配方。
+4. 同样等提取任务成功，再回读素材，核对 source/time_map、实际帧数/FPS/尺寸和 input_order 中 video→reference 的身份与哈希。重复内容可共享字节，每次导入/提取仍有独立 asset ID；不要将相同哈希的来源合并。
+5. failed/blocked 按 error 解释原因；修复后由用户或 Agent 按既有指示重新提交，不自动无限重试。停止平台会中断在途媒体任务，重启不重放 running；退出 MCP 不停止后台处理。详见 [媒体操作](references/operations.md#本地媒体准备)。
 
 ## 方案与工作状态
 

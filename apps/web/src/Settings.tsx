@@ -16,6 +16,11 @@ const configSchema = z.object({
   targets: z.array(targetSchema),
   default_target_id: z.string().nullable(),
   resource_overrides: z.record(z.string(), z.string()),
+  import_limits: z.object({
+    video_bytes: z.number().int(),
+    image_bytes: z.number().int(),
+    workflow_bytes: z.number().int(),
+  }),
 });
 const snapshotSchema = z.object({
   revision: z.number().int(),
@@ -170,6 +175,36 @@ export function Settings() {
                 </select>
               </label>
             </div>
+            <details className="media-details">
+              <summary>素材与工作流导入上限（字节）</summary>
+              <div className="settings-grid">
+                {(["video_bytes", "image_bytes", "workflow_bytes"] as const).map((key) => (
+                  <label key={key}>
+                    {
+                      { video_bytes: "视频", image_bytes: "图片", workflow_bytes: "工作流单文件" }[
+                        key
+                      ]
+                    }
+                    <input
+                      required
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={draft.import_limits[key]}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          import_limits: {
+                            ...draft.import_limits,
+                            [key]: Number(event.target.value),
+                          },
+                        })
+                      }
+                    />
+                  </label>
+                ))}
+              </div>
+            </details>
             <div className="target-list">
               {draft.targets.map((target) => {
                 function change(patch: Partial<z.infer<typeof targetSchema>>) {
