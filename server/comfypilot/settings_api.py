@@ -3,7 +3,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from comfypilot.monitoring import TargetMonitor, get_target_status
+from comfypilot.monitoring import TargetMonitor, get_target_status, target_view
 from comfypilot.project import ExecutionTarget, Project, ProjectConfig, ProjectError
 from comfypilot.runtime import RuntimeRecord
 from comfypilot.settings import (
@@ -72,6 +72,7 @@ def install_settings_routes(app: FastAPI, project: Project, runtime: RuntimeReco
                     "/api/resources",
                     "/api/assets",
                     "/api/review",
+                    "/api/events",
                 )
             )
             and request.method != "GET"
@@ -134,11 +135,13 @@ def install_settings_routes(app: FastAPI, project: Project, runtime: RuntimeReco
     @app.post("/api/targets/status")
     def status(body: TargetStatusRequest):
         return reply(
-            get_target_status(
-                project,
-                runtime.instance_id,
-                runtime.worker.pid if runtime.worker else 0,
-                body.target_id,
+            target_view(
+                get_target_status(
+                    project,
+                    runtime.instance_id,
+                    runtime.worker.pid if runtime.worker else 0,
+                    body.target_id,
+                )
             )
         )
 
@@ -156,5 +159,7 @@ def install_settings_routes(app: FastAPI, project: Project, runtime: RuntimeReco
         )
         await monitor.poll()
         return reply(
-            get_target_status(project, runtime.instance_id, runtime.worker.pid, body.target_id)
+            target_view(
+                get_target_status(project, runtime.instance_id, runtime.worker.pid, body.target_id)
+            )
         )

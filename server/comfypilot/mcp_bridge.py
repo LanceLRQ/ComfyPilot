@@ -11,6 +11,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import CallToolResult, ListToolsResult, TextContent, Tool, ToolAnnotations
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from comfypilot.events import EventsRequest, WaitEventsRequest
 from comfypilot.execution import (
     ActivatePlan,
     CancelQueuedRuns,
@@ -149,6 +150,14 @@ class CancelRunsArguments(ConnectionArguments, CancelQueuedRuns):
     pass
 
 
+class EventsArguments(ConnectionArguments, EventsRequest):
+    pass
+
+
+class WaitEventsArguments(ConnectionArguments, WaitEventsRequest):
+    pass
+
+
 class RunArguments(ConnectionArguments, RunRequest):
     pass
 
@@ -200,6 +209,9 @@ class ApplicationReply(BaseModel):
 
 
 PROJECT_API = {
+    "get_context": ("GET", "/api/context"),
+    "read_events": ("POST", "/api/events/read"),
+    "wait_for_events": ("POST", "/api/events/wait"),
     "get_system_status": ("GET", "/api/state"),
     "list_runs": ("GET", "/api/execution/runs"),
     "get_run": ("POST", "/api/execution/run"),
@@ -253,6 +265,24 @@ PROJECT_API = {
 
 # 仅定义静态协议元数据；不得在此探测项目、服务或 ComfyUI。
 TOOL_DEFINITIONS = {
+    "get_context": (
+        ConnectionArguments,
+        "新会话读取事实、剩余额度、有效方案、反馈、能力缺项与引用；不依赖历史对话。",
+        True,
+        True,
+    ),
+    "read_events": (
+        EventsArguments,
+        "按已保存游标分页补读业务事件，每页最多100；指标变化不占事件。",
+        True,
+        True,
+    ),
+    "wait_for_events": (
+        WaitEventsArguments,
+        "有界等待业务事件，最多25秒/100项；返回不代表宿主自动继续推理或离线唤醒。",
+        True,
+        True,
+    ),
     "get_system_status": (
         ConnectionArguments,
         "读取与网页相同的业务修订、游标、监测和审片状态。",
@@ -601,7 +631,8 @@ class ProjectBridge:
     def request(
         self, project: Project, runtime: RuntimeRecord, method: str, path: str, data: dict
     ) -> dict:
-        connection = HTTPConnection("127.0.0.1", runtime.port, timeout=3)
+        timeout = data["timeout_seconds"] + 3 if path == "/api/events/wait" else 3
+        connection = HTTPConnection("127.0.0.1", runtime.port, timeout=timeout)
         try:
             connection.request(
                 method,

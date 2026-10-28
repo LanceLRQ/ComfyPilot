@@ -44,7 +44,7 @@ stop_conditions 支持 on_failure（失败后停止）与 after_limit；最大�
 - 项目总生成并发为 1；内部预留意图会再检查所有暂停原因、次数、目标身份、fresh 的生成能力/节点和外部空队列。监测过期时等待或显式探测，不当作正常。
 - 目标改址或停用后旧方案不会偷偷换端。保存新方案前明确目标；旧在途记录始终保持原快照。
 - 内部 intent、额度和事件同事务。返回 reused 的原 intent 是待对账证据，不是再次发送许可。不明提交占用一次额度。
-- 实际生成消费与回执对账已接入。意图已存在时仅核对原目标、原prompt_id；丢失prompt_id时按项目/Run/意图标记匹配，不明状态保留并阻止新提交。只有history明确success且completed才进入collecting，节点完成不算成功。后台已自动收片，list_versions 返回当前收片阶段、字节/错误及已完整解码并通过配方规格检查的ready版本。非H.264/MP4视频会有独立检查的播放代理；原片和代理不能混淆。不同Run即使字节相同也是独立版本，不合并来源。当前支持反馈、技术评价、明确用户采用及来源清单；清理与MCP事件等待尚未交付；不要调用设计文档中的未来工具，也不要编辑 SQLite 完成这些操作。
+- 实际生成消费与回执对账已接入。意图已存在时仅核对原目标、原prompt_id；丢失prompt_id时按项目/Run/意图标记匹配，不明状态保留并阻止新提交。只有history明确success且completed才进入collecting，节点完成不算成功。后台已自动收片，list_versions 返回当前收片阶段、字节/错误及已完整解码并通过配方规格检查的ready版本。非H.264/MP4视频会有独立检查的播放代理；原片和代理不能混淆。不同Run即使字节相同也是独立版本，不合并来源。当前支持反馈、技术评价、明确用户采用及来源清单；提供get_context/read_events/wait_for_events接续和有界事件等待，清理仍未交付；不要调用设计文档中的未来工具，也不要编辑 SQLite 完成这些操作。
 
 收片 checkpoint 保存阶段、已传字节、输出指纹、暂存token、尝试次数与下次时间。临时读取错误最多3次额外重试，耗尽后blocked；缺工具/空间直接blocked；媒体损坏或规格不符使Run.failed。按既有用户指示修复环境后使用resume_collection，首次恢复使用新的UUID command_id；同一次resume_collection请求回执丢失时才复用这次恢复的ID。原execute_plan及先前恢复轮次的command_id均不能拿来做新恢复，否则会command_mismatch或只返回旧回执。沿用的是run_id，不用execute_plan重跑。部分文件会从头重传，非通用字节续传；同名文件变化仍阻塞，不能借恢复覆盖旧指纹。
 
@@ -58,3 +58,12 @@ stop_conditions 支持 on_failure（失败后停止）与 after_limit；最大�
 返工用propose_plan/create_plan，feedback_ids明确关联需处理的反馈；沿用segment_id保持同片段候选归属。草稿不解除挂起，activate_plan后才标记关联反馈addressed；这不等于用户verified。沿用同一指示共享authorization_id、累计次数和失败停止条件；扩大目标/配方/素材/参数/次数必须先取得用户新原话，再设置new_instruction=true。
 
 用户明确通过才record_user_decision，保留user_statement与来源；Agent评价用record_evaluation，不能代用户采用。get_delivery_manifest只包含已采用且技术合格的片段与来源。截图、媒体通过引用读取，不在MCP中传base64。
+
+
+## 上下文和事件接口
+
+get_context使用同一业务读取事务保存revision、event_cursor、有效方案授权累计、运行、收片、候选、采用与反馈；配置/资源单独携带自己的revision，不混作业务revision。候选窗口100条，近期运行20条；保存的版本/运行ID仍可按对应工具直接访问。node_schemas/node_classes不在公共目标监测中，配方标准预检仍在服务端使用完整catalog。
+
+read_events默认after=0、limit=50，上限100；wait_for_events同样分页，timeout_seconds默认20、范围0–25。超时返回timed_out，关闭平台会返回interrupted；无事件时游标不前进。等待不阻塞其他MCP工具，客户端退出不停止Worker，离线期间产生的业务事件仍可补读。HTTP为GET /api/context、POST /api/events/read和/api/events/wait；原GET /api/events和网页SSE继续可用。
+
+get_run/list_runs提供references，完整图、原始history和checks通过独立GET /api/execution/runs/{run_id}/evidence?kind=graph|history|checks读取；未产生时返回evidence_unavailable。context只给日志路径，不返回日志内容或凭据。所有HTTP引用相对于connect_service的面板URL；使用项目机器上的既有管理通道读取，不绕过实例或源限制。

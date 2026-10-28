@@ -1,4 +1,8 @@
-from typing import Annotated
+import json
+import sqlite3
+from contextlib import closing
+from typing import Annotated, Literal
+from uuid import UUID
 
 from fastapi import Body, FastAPI
 from pydantic import BaseModel, ConfigDict
@@ -45,6 +49,25 @@ def install_execution_routes(app: FastAPI, project: Project, runtime: RuntimeRec
     def collections():
         state = state_snapshot(project)
         return reply({key: state[key] for key in ("revision", "event_cursor", "collections")})
+
+    @app.get("/api/execution/runs/{run_id}/evidence")
+    def evidence(run_id: UUID, kind: Literal["graph", "history", "checks"]):
+        with closing(sqlite3.connect(project.database)) as db:
+            row = db.execute(
+                "SELECT document FROM execution_runs WHERE id=?", (str(run_id),)
+            ).fetchone()
+        if not row:
+            raise ProjectError("run_unavailable", "运行不存在。")
+        document = json.loads(row[0])
+        data = {
+            "graph": document.get("materialized", {}).get("graph"),
+            "history": document.get("external_success", {}).get("history")
+            or document.get("external_failure"),
+            "checks": document.get("collection", {}).get("checks"),
+        }[kind]
+        if data is None:
+            raise ProjectError("evidence_unavailable", "此运行尚无对应证据，请回读当前阶段。")
+        return reply({"run_id": str(run_id), "kind": kind, "evidence": data})
 
     @app.post("/api/execution/command")
     def command(body: Annotated[AnyCommand, Body(discriminator="action")]):

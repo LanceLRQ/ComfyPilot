@@ -12,6 +12,9 @@ from comfypilot.project import initialize_project, resolve_project_root
 from mcp import Client, StdioServerParameters
 
 TOOLS = {
+    "get_context",
+    "read_events",
+    "wait_for_events",
     "get_system_status",
     "list_runs",
     "get_run",

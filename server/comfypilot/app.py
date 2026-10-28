@@ -21,7 +21,7 @@ from pydantic import BaseModel
 from comfypilot.events import install_event_routes
 from comfypilot.execution_api import install_execution_routes
 from comfypilot.media_api import install_media_routes
-from comfypilot.monitoring import get_target_status, metric
+from comfypilot.monitoring import get_target_status, metric, target_view
 from comfypilot.project import Project, read_dispatch, read_project, set_dispatch
 from comfypilot.resources_api import install_resource_routes
 from comfypilot.review_api import install_review_routes
@@ -177,9 +177,7 @@ def create_app(
                 target["id"],
                 current=current,
             )
-            sample.pop("node_schemas", None)
-            sample.pop("node_classes", None)
-            targets.append(sample)
+            targets.append(target_view(sample))
         space = shutil.disk_usage(project.root)
         monitored = {
             "worker": worker_status().model_dump(mode="json"),

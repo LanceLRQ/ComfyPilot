@@ -40,6 +40,12 @@ def metric(
     }
 
 
+def target_view(sample: dict) -> dict:
+    return {
+        key: value for key, value in sample.items() if key not in {"node_schemas", "node_classes"}
+    }
+
+
 def store_sample(
     project: Project,
     instance_id: UUID,

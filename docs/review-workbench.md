@@ -31,3 +31,8 @@
 MCP 工作控制与网页共用业务修订、游标和命令用例：`get_system_status` 读取共享快照，`list_runs/get_run` 读取运行摘要，`get_collection_status` 读取收片。`pause_plan/resume_plan(plan_id)` 控制有效方案后续派发，暂停随同任务新修订继承；项目 `pause_dispatch/resume_dispatch` 和方案暂停分别解除。`cancel_queued_runs(plan_id,run_ids)` 只取消明确指定且 queued、无 intent 的运行，任意一项不符合就整批拒绝。Worker 领取时在同一事务复查，取消与意图预留只有一方能成功。
 
 `propose_plan` 复用 `create_plan` 创建草稿，不自动生效；参数、素材、目标改变须新修订，旧在途记录不改写。控制回执包含 command_id、revision、event_id、result、受影响运行/步骤 `affected_steps` 与剩余门禁 `control`，重复命令返回原回执。暂停/取消都不调用 ComfyUI 全局中断；已有 intent 继续核对和收片，`resume_collection` 恢复原 Run 收片而不增加生成或额度。
+
+
+新会话用 `get_context` 读取当前根目录、各类修订、有效方案、授权累计/剩余额度、运行/收片、采用与候选、未解决反馈及监测缺项。业务字段与游标在同一读事务取得，配置/资源各保留自己的修订。`read_events(after,limit)` 支持游标分页，`wait_for_events` 默认20秒、最多25秒/100项，超时不推进游标；停服中断等待，宿主断开不停止Worker，离线事件仍可补读。等待不代表宿主自动继续推理或可被离线唤醒。详细续接、冲突和模块操作见随包 ComfyPilot Skill。
+
+公共目标状态只传指标、能力和节点计数/哈希；完整节点schema由服务端预检使用。媒体和截图、运行graph/history/checks、日志及资源按引用访问；运行摘要的 `references` 提供独立证据 URL，尚未产生的证据明确不可用。事件流不包含大块媒体或完整工作图。

@@ -1,18 +1,30 @@
 import asyncio
 import json
 import sqlite3
+import time
 from collections.abc import Callable
 from contextlib import closing
 from typing import Annotated
 
-from fastapi import FastAPI, Header, Query
+from fastapi import FastAPI, Header, Query, Request
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, ConfigDict, Field
 
 from comfypilot.collection import read_versions
-from comfypilot.execution import read_execution
+from comfypilot.execution import authorization_usage, read_execution
 from comfypilot.project import Project, ProjectError
 from comfypilot.review import read_decisions, read_review_items
 from comfypilot.runtime import RuntimeRecord
+
+
+class EventsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    after: int = Field(default=0, ge=0, le=2**63 - 1)
+    limit: int = Field(default=50, ge=1, le=100)
+
+
+class WaitEventsRequest(EventsRequest):
+    timeout_seconds: int = Field(default=20, ge=0, le=25)
 
 
 def state_snapshot(project: Project) -> dict:
@@ -23,6 +35,11 @@ def state_snapshot(project: Project) -> dict:
         state.update(read_versions(db))
         state.update(read_review_items(db, unresolved=False))
         state.update(read_decisions(db))
+        state["authorizations"] = [
+            {"plan_id": plan["id"], **authorization_usage(db, plan["id"])}
+            for plan in state["plans"]
+            if plan["status"] == "active"
+        ]
         state["activity"] = [
             dict(row)
             for row in db.execute(
@@ -37,6 +54,10 @@ def state_snapshot(project: Project) -> dict:
         intent = run.pop("intent")
         run["has_intent"] = intent is not None
         run["started_at"] = intent["created_at"] if intent else None
+        run["references"] = {
+            kind: f"/api/execution/runs/{run['id']}/evidence?kind={kind}"
+            for kind in ("graph", "history", "checks")
+        }
         run["document"] = {
             key: value
             for key, value in run["document"].items()
@@ -88,6 +109,32 @@ def install_event_routes(
     @app.get("/api/state")
     def snapshot():
         return reply({**state_snapshot(project), "monitoring": monitoring()})
+
+    @app.get("/api/context")
+    def context():
+        from comfypilot.context import build_context
+
+        return reply(build_context(project, state_snapshot(project), monitoring()))
+
+    @app.post("/api/events/read")
+    def read(body: EventsRequest):
+        return reply(read_events(project, body.after, body.limit))
+
+    @app.post("/api/events/wait")
+    async def wait(body: WaitEventsRequest, request: Request):
+        deadline = time.monotonic() + body.timeout_seconds
+        while True:
+            page = await asyncio.to_thread(read_events, project, body.after, body.limit)
+            interrupted = bool(stopping and stopping()) or await request.is_disconnected()
+            if page["events"] or time.monotonic() >= deadline or interrupted:
+                return reply(
+                    {
+                        **page,
+                        "timed_out": not page["events"] and not interrupted,
+                        "interrupted": interrupted,
+                    }
+                )
+            await asyncio.sleep(min(0.2, max(0, deadline - time.monotonic())))
 
     @app.get("/api/events")
     def events(

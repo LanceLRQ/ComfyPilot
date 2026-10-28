@@ -15,7 +15,7 @@ description: 在用户指定的本地创作目录，通过 ComfyPilot MCP 管理
 2. `inspect_project(project_root)` 检查项目。未初始化且用户要求在这里开展项目时，调用 `init_project`；遇到不完整状态不覆盖用户文件。
 3. 调用 `start_service` 启动或复用这个目录的实例，再单独调用 `connect_service`。已有实例也需要显式连接。服务未运行时，`connect_service` 不会启动它。
 4. 保存返回的项目 UUID、实例 ID、URL 和本 MCP 进程的 `connection_ref`，业务调用始终带 `project_root` 与此引用。打开返回 URL 供用户查看；不要硬编码端口。
-5. 使用 `get_project`、`get_execution`、`get_monitor_status` 了解当前配置、业务与带时间的实际监测。告知用户当前已有工作及阻止派发的原因。
+5. 先使用 `get_context` 了解当前事实、有效方案、剩余额度、反馈、能力缺项和事件游标；需要更细状态时使用 `get_system_status`、`list_runs/get_run`、`get_collection_status`。告知用户当前已有工作及阻止派发的原因。
 
 工具在宿主中可能带 MCP 名称前缀，使用实际发现的 schema 和名称。工具缺失时说明安装版本/注册缺项，不编造成功回执。
 
@@ -62,3 +62,20 @@ Worker 已接通真实生成提交与原目标对账。用户已有明确执行�
 - 对旧提交意图、未知外部任务或不明回执保留原身份与证据，不自动重发、清空队列或换地址认领。Worker 已实现原目标 history→queue→history 对账；不明状态占用额度并阻止新生成。后台会自动接续已保存成功的收片；不能把外部成功当作可审版本，等待 list_versions 的 ready 与检查通过。
 
 完成后告诉用户项目目录、面板 URL、连接/目标状态、已做操作及仍需补齐的能力。没有用户停止指示时，让独立平台继续运行。
+
+
+## 新会话接续、审片与返工
+
+新会话没有历史对话时，显式 connect_service 后先 get_context，按返回的项目根目录/UUID、配置和资源各自修订、业务revision/event_cursor、active_plans、authorizations、active_runs、collections、adopted_versions、candidates、unresolved_feedback 和 control 还原当前事实。authorizations 的used_submissions是同一授权跨修订累计；remaining_submissions已扣除queued预占，不代表可以新增这些已有动作。监测时间过期或能力unknown时，先解释缺项或probe_target，不凭旧对话假设环境仍可用。
+
+审片反馈由网页直接入库并按关联任务挂起，Agent离线仍生效。接续时先查看 needs_changes 及版本/时间/截图引用，决定在原指示内调整哪些未来步骤；用propose_plan/create_plan创建新修订并显式关联feedback_ids，保持segment_id以归入原片段。activate_plan后关联反馈才addressed并解除对应挂起，这不等于用户已verified。已有intent/回执/目标/输入和采用引用不改写；扩大目标、参数、素材、配方、次数或失败停止后的继续生成，必须先取得新用户指示并记录new_instruction=true，不能复制旧指示重置额度。
+
+用户明确“采用”才record_user_decision并保存user_statement；技术判断用record_evaluation。新候选失败不能清除原采用。交付前用get_delivery_manifest，只提供清单中的原件和来源；生成成功、技术合格或Agent满意都不代表用户采用。
+
+## 事件等待与冲突
+
+- get_context保存event_cursor后，read_events(after,limit)逐页读取，按返回cursor推进；has_more时继续，断线从已消费游标补读，不用时间戳猜游标。
+- wait_for_events(after,limit,timeout_seconds)最多25秒/100条，只等待业务事件；timed_out表示本次无新事件，Worker仍工作。节点/字节等指标变化不消耗业务序号。事件只给动作和引用，收到后回读get_context或对应对象。
+- 事件返回不代表Claude/Codex宿主会自动继续推理；宿主离线时不主动唤醒，也无需大模型监控Agent。需要持续协同时由宿主在用户已有指示内安排后续调用，不承诺平台自动唤起宿主。
+- Web/MCP写入共用业务expected_revision。conflict时保留自己的原草稿、参数与反馈，回读新状态并核对用户意图后合并；新操作用新command_id。回执不明时先按原ID/原参数重读，不把超时当失败重做。
+- 媒体、截图、完整图/history/checks、日志和资源都按返回引用读取，不把大块base64、完整节点目录或秘密贴入上下文。运行references的证据尚未产生时会明确不可用；日志路径在平台机器，访问需已有本机/管理通道，不假定远程路径能直接读。目标摘要中的node_count/hash不是安装版本或实测证明。
