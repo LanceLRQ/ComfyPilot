@@ -26,6 +26,20 @@ class ServerConfig(BaseModel):
     port: int = Field(default=8765, ge=1, le=65535)
 
 
+class LocalAssets(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    mode: Literal["local"] = "local"
+    input_dir: str = Field(min_length=1, max_length=4096)
+    output_dir: str = Field(min_length=1, max_length=4096)
+
+    @field_validator("input_dir", "output_dir")
+    @classmethod
+    def absolute_directory(cls, value: str) -> str:
+        if not Path(value).is_absolute():
+            raise ValueError("素材目录必须是平台所在机器上的绝对路径")
+        return value
+
+
 class ExecutionTarget(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     id: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
@@ -34,6 +48,7 @@ class ExecutionTarget(BaseModel):
     base_url: str
     enabled: bool = True
     credential_ref: str | None = Field(default=None, pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
+    assets: LocalAssets | None = None
 
     @field_validator("base_url")
     @classmethod
@@ -191,7 +206,7 @@ def migrate_database(project: Project) -> None:
         db.execute("PRAGMA journal_mode=WAL")
         db.execute("BEGIN IMMEDIATE")
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 7:
+        if version > 8:
             raise ProjectError("unsupported_schema", "数据库格式比当前程序更新，请使用对应版本。")
         db.execute(
             "CREATE TABLE IF NOT EXISTS project "
@@ -266,6 +281,11 @@ def migrate_database(project: Project) -> None:
 
             initialize_media_schema(db)
             db.execute("PRAGMA user_version=7")
+        if version < 8:
+            from comfypilot.replicas import initialize_replica_schema
+
+            initialize_replica_schema(db)
+            db.execute("PRAGMA user_version=8")
 
 
 def read_dispatch(project: Project) -> dict[str, bool | str]:
@@ -308,7 +328,7 @@ def read_project(root: Path) -> Project:
     identity = ProjectIdentity.model_validate_json((state / "project.json").read_text("utf-8"))
     with closing(sqlite3.connect((state / "state.sqlite").as_uri() + "?mode=ro", uri=True)) as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 7:
+        if version > 8:
             raise ProjectError("unsupported_schema", "数据库格式比当前程序更新，请使用对应版本。")
         if version >= 3:
             row = db.execute(

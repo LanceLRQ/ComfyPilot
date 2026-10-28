@@ -77,6 +77,9 @@ outputs:
     node_id: '92'
     key: images
     kind: video
+    filename_prefix:
+      node_id: '92'
+      input_name: filename_prefix
 custom_nodes: []
 models:
 - name: minimax_h3_video_vae_int8_convrot.safetensors

@@ -24,6 +24,8 @@
 
 Recipe 输入与输出的名称、类型必须匹配模块。输入必须完整列在 `input_order`，每个输入含 `kind` 与非空 `bindings`；绑定字段为 `node_id/input_name`。参数支持 integer/number/string/boolean，包含 `type/default/bindings`，可选 `enum/minimum/maximum`。每个输出包含 `node_id/key/kind`，其中 key 是后续 history 输出读取键。自定义节点 ID 引用对应 node 声明。模型声明包含 `name/source/license/node_id/input_name`，可选 `sha256`，绑定到图中的实际模型选择值；哈希声明不等于目标模型文件已校验。
 
+M2/2.4起，输出可声明`filename_prefix: {node_id,input_name}`，绑定未被参数/媒体占用的字符串输入；准备Run时物化为项目/Run专属前缀。缺绑定保持未知，不据此授予清理资格。H3已声明SaveVideo实际前缀绑定，因此配方内容哈希发生变化；旧快照不被改写。
+
 例如以下是项目配方声明的结构，节点 ID、文件和依赖须替换为实际导出的资源，本例不是内置可运行配方：
 
 ```yaml

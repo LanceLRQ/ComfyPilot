@@ -27,6 +27,7 @@ class Step(StrictModel):
     recipe_id: Identifier
     recipe_hash: ContentHash
     inputs: dict[Identifier, ContentHash] = Field(min_length=1, max_length=32)
+    asset_ids: dict[Identifier, str] = Field(default_factory=dict, max_length=32)
     parameters: dict[Identifier, Parameter] = Field(max_length=64)
     target_id: Identifier
     required_nodes: list[Identifier] = Field(min_length=1, max_length=128)
@@ -238,6 +239,17 @@ def apply_command(project: Project, command: AnyCommand) -> dict:
                 frozen = freeze_recipe(
                     project, step.recipe_id, step.recipe_hash, step.inputs, step.parameters
                 )
+                if step.asset_ids:
+                    from comfypilot.media import get_asset
+
+                    if set(step.asset_ids) != set(step.inputs) or any(
+                        get_asset(project, asset_id)["content_hash"] != step.inputs[slot]
+                        or get_asset(project, asset_id)["kind"]
+                        != frozen["manifest"]["inputs"][slot]["kind"]
+                        for slot, asset_id in step.asset_ids.items()
+                    ):
+                        raise ProjectError("asset_mismatch", "素材身份、类型与授权内容哈希不匹配。")
+                frozen["asset_ids"] = step.asset_ids
                 if set(step.required_nodes) != {
                     node["class_type"] for node in frozen["graph"].values()
                 }:

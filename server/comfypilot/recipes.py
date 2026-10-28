@@ -58,6 +58,7 @@ class Output(BaseModel):
     node_id: Text
     key: Name
     kind: Literal["video", "image"]
+    filename_prefix: Binding | None = None
 
 
 class ModelDependency(BaseModel):
@@ -166,6 +167,17 @@ def validate_graph(recipe: Recipe, value: dict) -> dict:
             occupied.add(pair)
     if any(output.node_id not in graph for output in recipe.outputs.values()):
         raise ValueError("输出规则引用了不存在的节点")
+    for output in recipe.outputs.values():
+        binding = output.filename_prefix
+        if binding:
+            pair = (binding.node_id, binding.input_name)
+            if (
+                pair in occupied
+                or binding.node_id not in graph
+                or not isinstance(graph[binding.node_id]["inputs"].get(binding.input_name), str)
+            ):
+                raise ValueError("输出前缀绑定必须是未占用的字符串输入")
+            occupied.add(pair)
     for model in recipe.models:
         if (
             model.node_id not in graph

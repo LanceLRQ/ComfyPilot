@@ -25,6 +25,7 @@ from comfypilot.media import (
 )
 from comfypilot.media_tools import require_tools
 from comfypilot.project import Project, ProjectError
+from comfypilot.replicas import list_replicas
 from comfypilot.runtime import RuntimeRecord
 from comfypilot.settings import get_project
 
@@ -44,6 +45,10 @@ def install_media_routes(app: FastAPI, project: Project, runtime: RuntimeRecord)
     @app.post("/api/assets/get")
     def asset(body: AssetRequest):
         return reply(get_asset(project, body.asset_id))
+
+    @app.get("/api/assets/replicas")
+    def replicas():
+        return reply(list_replicas(project))
 
     @app.post("/api/assets/jobs/get")
     def job(body: MediaJobRequest):

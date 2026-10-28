@@ -155,6 +155,7 @@ class ApplicationReply(BaseModel):
 
 
 PROJECT_API = {
+    "list_replicas": ("GET", "/api/assets/replicas"),
     "list_assets": ("GET", "/api/assets"),
     "get_asset": ("POST", "/api/assets/get"),
     "get_media_job": ("POST", "/api/assets/jobs/get"),
@@ -191,6 +192,12 @@ PROJECT_API = {
 
 # 仅定义静态协议元数据；不得在此探测项目、服务或 ComfyUI。
 TOOL_DEFINITIONS = {
+    "list_replicas": (
+        ConnectionArguments,
+        "读取本项目已登记的目标副本、指纹和引用，不扫描未知文件。",
+        True,
+        True,
+    ),
     "list_assets": (ConnectionArguments, "读取当前项目最近素材、媒体任务和导入限额。", True, True),
     "get_asset": (
         AssetArguments,

@@ -1,6 +1,6 @@
 # Agent 接入与 M1 验收
 
-日期：2026-10-28（Asia/Shanghai）。当前交付项目平台、33 个 MCP 工具和操作 Skill，包含资源快照、标准预检及[素材导入与显式片段](media-assets.md)。真实生成、收片和审片尚未接入。
+日期：2026-10-28（Asia/Shanghai）。当前交付项目平台、34 个 MCP 工具和操作 Skill，包含资源快照、标准预检、[素材导入与显式片段](media-assets.md)及[目标副本查询](asset-adapters.md)。真实生成、收片和审片尚未接入。
 
 ## 1. 安装与 Skill 定位
 
