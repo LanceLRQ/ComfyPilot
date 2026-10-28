@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { z } from "zod";
+import { randomUUID } from "./uuid";
 import type { Version } from "./Versions";
 import { useWorkspace } from "./Workspace";
 
@@ -29,7 +30,7 @@ export function Decisions({ version }: { version: Version }) {
       pending.current = {
         version_id: version.id,
         decision,
-        command_id: crypto.randomUUID(),
+        command_id: randomUUID(),
         expected_revision: snapshot.data.revision,
       };
     }

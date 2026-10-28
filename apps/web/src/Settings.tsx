@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { z } from "zod";
+import { randomUUID } from "./uuid";
 
 const targetSchema = z.object({
   id: z.string(),
@@ -382,7 +383,7 @@ export function Settings() {
                     targets: [
                       ...draft.targets,
                       {
-                        id: `target-${crypto.randomUUID().slice(0, 8)}`,
+                        id: `target-${randomUUID().slice(0, 8)}`,
                         name: "",
                         location: "remote",
                         base_url: "",

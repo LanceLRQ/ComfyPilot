@@ -11,6 +11,7 @@ check:
 	uv run --locked --extra dev ruff check server tests extensions
 	uv run --locked --extra dev ruff format --check server tests extensions
 	npm --prefix apps/web run check
+	npm --prefix apps/web test
 	npm --prefix apps/web run build
 	uv run --locked --extra dev pytest -q
 

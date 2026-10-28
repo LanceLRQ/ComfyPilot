@@ -24,7 +24,7 @@ from comfypilot.events import install_event_routes
 from comfypilot.execution_api import install_execution_routes
 from comfypilot.lan import public_monitor
 from comfypilot.media_api import install_media_routes
-from comfypilot.monitoring import get_target_status, metric, target_view
+from comfypilot.monitoring import expire_status, get_target_status, metric, target_view
 from comfypilot.project import Project, read_dispatch, read_project, set_dispatch
 from comfypilot.resources_api import install_resource_routes
 from comfypilot.review_api import install_review_routes
@@ -176,6 +176,8 @@ def create_app(
     def monitor_view():
         nonlocal monitored, monitored_at
         if monitored and time.monotonic() - monitored_at < 5:
+            expire_status(monitored, datetime.now(UTC))
+            monitored["worker"] = worker_status().model_dump(mode="json")
             return monitored
         current = get_project(project)
         targets = []

@@ -1,5 +1,6 @@
 import { type RefObject, useEffect, useRef, useState } from "react";
 import { z } from "zod";
+import { randomUUID } from "./uuid";
 import type { Version } from "./Versions";
 import { type regionSchema, screenshotSchema, useWorkspace } from "./Workspace";
 
@@ -55,7 +56,7 @@ export function Feedback({
         ...draft,
         ...fields,
         revision: fields.revision ?? draft.revision ?? snapshot?.data.revision,
-        command_id: crypto.randomUUID(),
+        command_id: randomUUID(),
       },
     }));
   }
@@ -155,7 +156,7 @@ export function Feedback({
         body: JSON.stringify({
           action: "update_feedback",
           source: "web_user",
-          command_id: crypto.randomUUID(),
+          command_id: randomUUID(),
           expected_revision: snapshot.data.revision,
           feedback_id: id,
           status: "verified",

@@ -129,6 +129,61 @@ def test_samples_expire_and_other_instance_or_worker_never_reuses_old_values(tmp
         )
 
 
+def test_http_monitor_cache_expires_samples_at_fifteen_seconds(tmp_path, monkeypatch):
+    import comfypilot.app as application
+    import comfypilot.monitoring as monitoring
+    import httpx2
+    from comfypilot.runtime import RuntimeRecord, process_identity
+
+    with comfy_server() as (address, calls, _):
+        project = configured_project(tmp_path, address)
+        runtime = RuntimeRecord(
+            project_id=project.identity.project_id,
+            root=str(project.root),
+            instance_id=uuid4(),
+            api=process_identity(os.getpid()),
+            worker=process_identity(os.getpid()),
+            port=8765,
+        )
+        monitor = monitoring.TargetMonitor(
+            project,
+            runtime.instance_id,
+            os.getpid(),
+            2,
+            ExecutionTarget.model_validate(get_project(project)["config"]["targets"][0]),
+        )
+        asyncio.run(monitor.poll())
+        sample = monitoring.get_target_status(project, runtime.instance_id, os.getpid(), "render")
+        observed = datetime.fromisoformat(sample["metrics"]["ram_free"]["observed_at"])
+        clock = observed + timedelta(seconds=14.9)
+
+        class Clock(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return clock
+
+        monkeypatch.setattr(application, "datetime", Clock)
+        monkeypatch.setattr(monitoring, "datetime", Clock)
+        app = application.create_app(project, runtime)
+        count = len(calls)
+
+        async def exercise():
+            nonlocal clock
+            async with httpx2.AsyncClient(
+                transport=httpx2.ASGITransport(app=app), base_url="http://127.0.0.1:8765"
+            ) as client:
+                before = (await client.get("/api/status")).json()["data"]
+                assert before["targets"][0]["metrics"]["ram_free"]["availability"] == "fresh"
+                clock = observed + timedelta(seconds=15)
+                after = (await client.get("/api/status")).json()["data"]
+                metric = after["targets"][0]["metrics"]["ram_free"]
+                assert metric["availability"] == "stale"
+                assert metric["observed_at"] == observed.isoformat()
+
+        asyncio.run(exercise())
+        assert len(calls) == count
+
+
 def test_slow_target_has_bounded_timeout_and_backoff(tmp_path):
     from comfypilot.monitoring import TargetMonitor, get_target_status
 

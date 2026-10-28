@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { z } from "zod";
+import { randomUUID } from "./uuid";
 import { useWorkspace } from "./Workspace";
 
 const planSchema = z.object({
@@ -88,7 +89,7 @@ export function Maintenance() {
   }
   async function execute(retry = false) {
     if (!snapshot || !preview?.id) return;
-    const id = retry || !command ? crypto.randomUUID() : command;
+    const id = retry || !command ? randomUUID() : command;
     setCommand(id);
     setBusy(true);
     try {

@@ -46,6 +46,25 @@ def target_view(sample: dict) -> dict:
     }
 
 
+def expire_status(value, clock: datetime) -> None:
+    if isinstance(value, dict):
+        if (
+            value.get("status") == "available"
+            and value.get("expires_at")
+            and clock >= datetime.fromisoformat(value["expires_at"])
+        ):
+            value["status"] = "unknown"
+        if value.get("availability") == "fresh" and clock >= datetime.fromisoformat(
+            value["expires_at"]
+        ):
+            value["availability"] = "stale"
+        for child in value.values():
+            expire_status(child, clock)
+    elif isinstance(value, list):
+        for child in value:
+            expire_status(child, clock)
+
+
 def store_sample(
     project: Project,
     instance_id: UUID,
@@ -144,26 +163,7 @@ def get_target_status(
         else:
             result.update(data)
     clock = now or datetime.now(UTC)
-
-    def expire(value):
-        if isinstance(value, dict):
-            if (
-                value.get("status") == "available"
-                and value.get("expires_at")
-                and clock >= datetime.fromisoformat(value["expires_at"])
-            ):
-                value["status"] = "unknown"
-            if value.get("availability") == "fresh" and clock >= datetime.fromisoformat(
-                value["expires_at"]
-            ):
-                value["availability"] = "stale"
-            for child in value.values():
-                expire(child)
-        elif isinstance(value, list):
-            for child in value:
-                expire(child)
-
-    expire(result)
+    expire_status(result, clock)
     stage = result["stage"]
     result["stage_elapsed_seconds"] = (
         max(0, (clock - datetime.fromisoformat(stage["observed_at"])).total_seconds())

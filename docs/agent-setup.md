@@ -58,7 +58,7 @@ Agent 按 Skill 取得规范绝对根目录，依次 inspect、必要时 init、
 
 执行端地址和默认值可以随时修改。文件修改必须显式 refresh 才成为有效修订；写入使用 get_project 的配置 revision。任务/方案命令使用 get_execution 的业务 revision 与 UUID command_id，不能混用。详见安装包 Skill 的 references/operations.md 和 [README](../README.md#方案与执行范围)。
 
-连接 ComfyUI 不表示能安装节点/模型、传输任意视频或清理磁盘；没有对应通道时返回明确缺项。Worker 已消费获授权且通过门禁的生成队列，queued 仅代表等待；原目标明确成功后自动收片，ready 且检查通过才提供基础预览。逐段审片、共享监控与 MCP 控制已交付；局域网和清理仍按 M4 交付。
+连接 ComfyUI 不表示能安装节点/模型、传输任意视频或清理磁盘；没有对应通道时返回明确缺项。Worker 已消费获授权且通过门禁的生成队列，queued 仅代表等待；原目标明确成功后自动收片，ready 且检查通过才提供基础预览。逐段审片、共享监控、MCP 控制、局域网审片、清理和备份已交付；当前发布保留项见 [M4 验收](m4-validation.md)。
 
 ## 4. 实测矩阵
 
