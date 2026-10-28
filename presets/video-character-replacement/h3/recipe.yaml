@@ -1,0 +1,105 @@
+kind: recipe
+id: minimax-h3-replacement
+module_id: video-character-replacement
+name: H3 单人视频替换
+version: '0.1'
+description: MiniMax H3 原生基础 R2V；单张人物参考图与一段已裁剪视频；生成音频，待完整生成验收。
+instructions: video-character-replacement/h3/README.md
+workflow: video-character-replacement/h3/canvas.json
+api_graph: video-character-replacement/h3/api.json
+input_order:
+- video
+- reference
+inputs:
+  video:
+    kind: video
+    bindings:
+    - node_id: '200'
+      input_name: file
+  reference:
+    kind: image
+    bindings:
+    - node_id: '137'
+      input_name: image
+parameters:
+  prompt:
+    type: string
+    default: In <Video 1>, replace only the main foreground person with the person
+      in <Picture 1>. Preserve the identity and clothing of <Picture 1>. Follow the
+      movements, timing, body orientation and camera motion of <Video 1>. Preserve
+      the other people, background, lighting and framing of <Video 1>. One continuous
+      realistic shot, no cuts, no dialogue.
+    bindings:
+    - node_id: '138'
+      input_name: value
+  seed:
+    type: integer
+    default: 42
+    bindings:
+    - node_id: '129'
+      input_name: noise_seed
+    minimum: 0
+    maximum: 9007199254740991
+  width:
+    type: integer
+    default: 768
+    bindings:
+    - node_id: '136'
+      input_name: width
+    enum:
+    - 768
+  height:
+    type: integer
+    default: 448
+    bindings:
+    - node_id: '136'
+      input_name: height
+    enum:
+    - 448
+  length:
+    type: integer
+    default: 124
+    bindings:
+    - node_id: '136'
+      input_name: length
+    enum:
+    - 124
+  steps:
+    type: integer
+    default: 20
+    bindings:
+    - node_id: '124'
+      input_name: steps
+    enum:
+    - 20
+outputs:
+  main:
+    node_id: '92'
+    key: images
+    kind: video
+custom_nodes: []
+models:
+- name: minimax_h3_video_vae_int8_convrot.safetensors
+  source: https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/e5eb578a89295337b8ff433a035929ce0279e0b6/vae/minimax_h3_video_vae_int8_convrot.safetensors
+  license: https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/42ed227ee7df40d41602854ae760620d6eb651fe/LICENSE
+  node_id: '119'
+  input_name: vae_name
+  sha256: 52a2c8c73583c86e4f41cdcce3a6ad0ea562987bc0bf3d60a0cef5f5c8e60c0e
+- name: minimax_h3_audio_vae_fp32.safetensors
+  source: https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/e5eb578a89295337b8ff433a035929ce0279e0b6/vae/minimax_h3_audio_vae_fp32.safetensors
+  license: https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/42ed227ee7df40d41602854ae760620d6eb651fe/LICENSE
+  node_id: '120'
+  input_name: vae_name
+  sha256: 8e505d95dd1561d47abd43d4238fd40d9bb1ae9e147ed0a4cba778d76ae4db48
+- name: minimax_h3_ref2va_pruned_int8_convrot.safetensors
+  source: https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/e5eb578a89295337b8ff433a035929ce0279e0b6/diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors
+  license: https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/42ed227ee7df40d41602854ae760620d6eb651fe/LICENSE
+  node_id: '127'
+  input_name: unet_name
+  sha256: 9255f52b6677845ad238f20dfaafa94727053694127ab7f255c048f0f9365779
+- name: qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors
+  source: https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/e5eb578a89295337b8ff433a035929ce0279e0b6/text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors
+  license: https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/42ed227ee7df40d41602854ae760620d6eb651fe/LICENSE
+  node_id: '128'
+  input_name: clip_name
+  sha256: 35a88d51044231fe332301d7a62aa81e3f2cba62febeb446e2c1e3e0ef76f2c6

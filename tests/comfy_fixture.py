@@ -10,7 +10,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 @contextmanager
 def comfy_server(
-    *, events=True, delay=0, partial=False, progress=True, disconnect=False, busy=True
+    *, events=True, delay=0, partial=False, progress=True, disconnect=False, busy=True, catalog=None
 ):
     app = FastAPI()
     calls = []
@@ -60,6 +60,8 @@ def comfy_server(
 
     @app.get("/object_info")
     async def nodes():
+        if catalog is not None:
+            return catalog
         return {
             "FixtureRender": {
                 "input": {

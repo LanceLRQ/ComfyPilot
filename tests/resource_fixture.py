@@ -3,6 +3,10 @@ import json
 import yaml
 
 
+def recipe_record(snapshot, recipe_id="swap"):
+    return next(item for item in snapshot["recipes"] if item["id"] == recipe_id)
+
+
 def write_recipe(root, *, recipe_id="swap"):
     folder = root / "modules/demo"
     folder.mkdir(parents=True, exist_ok=True)

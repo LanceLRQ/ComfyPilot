@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from websockets.exceptions import WebSocketException
 
 from comfypilot.comfy import ComfyEvent, ConfiguredWebSocket, Queue, Stats, fetch_documents
+from comfypilot.node_schema import normalize_inputs
 from comfypilot.project import ExecutionTarget, Project, ProjectConfig, ProjectError
 from comfypilot.settings import get_project, target_headers
 
@@ -238,26 +239,8 @@ class TargetMonitor:
             schemas = {}
             if isinstance(nodes, dict):
                 for name, node in nodes.items():
-                    inputs = {}
-                    for key, declaration in {**node.input.optional, **node.input.required}.items():
-                        if not declaration or not isinstance(declaration[0], (str, list)):
-                            continue
-                        options = (
-                            declaration[1]
-                            if len(declaration) > 1 and isinstance(declaration[1], dict)
-                            else {}
-                        )
-                        inputs[key] = {
-                            "type": declaration[0],
-                            "required": key in node.input.required,
-                            **{
-                                field: options[field]
-                                for field in ("min", "max")
-                                if type(options.get(field)) in (int, float)
-                            },
-                        }
                     schemas[name] = {
-                        "inputs": inputs,
+                        "inputs": normalize_inputs(node.input.required, node.input.optional),
                         "outputs": node.output,
                         "output_node": node.output_node,
                     }

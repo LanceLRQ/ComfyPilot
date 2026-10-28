@@ -1,12 +1,12 @@
 # 模块、配方与项目资源
 
-日期：2026-10-28（Asia/Shanghai）。M2/2.1 已实现声明、显式发现、目标标准预检和不可变快照；真实人物替换配方由 M2/2.2 交付，生成、素材上传和收片尚未接入。
+日期：2026-10-28（Asia/Shanghai）。M2/2.1 已实现声明、显式发现、目标标准预检和不可变快照；M2/2.2 已加入 [H3 首发人物替换配方与环境说明](h3-recipe.md)。生成、素材上传和收片尚未接入。
 
 ## 目录与来源
 
 平台只读取当前项目的 `modules/`、`workflows/`、`custom_nodes/` 和安装包预设。普通 JSON、说明、节点源码均可保存。`module.yaml`、`recipe.yaml`、`node.yaml` 分别识别为模块、配方、自定义节点声明；其他文件只作为原件，不导入 Python、不运行 JavaScript、不安装依赖。
 
-来源示例为 `builtin:video-character-replacement/module.yaml` 和 `project:modules/my-module/recipe.yaml`。界面/MCP 展示来源、版本、内容哈希、说明、绑定与依赖。内置人物替换只有模块声明，不能据此发起实际生成。
+来源示例为 `builtin:video-character-replacement/module.yaml` 和 `project:modules/my-module/recipe.yaml`。界面/MCP 展示来源、版本、内容哈希、说明、绑定与依赖。内置 H3 配方 ID 为 `minimax-h3-replacement`，配方、API 图、画布、上游原件、锁文件和说明随包交付；真实生成仍待后续执行链。
 
 声明中的文件引用始终相对该来源根目录：项目声明使用 `modules/my-module/README.md` 等路径；内置声明相对预设根目录。不能使用绝对路径、`..`、反斜杠或跨来源引用。资源目录内不接受符号链接。隐藏文件、依赖环境、node_modules、__pycache__、pyc/tmp/bak 不收录。模型本体与媒体应放资源目录外。
 
@@ -82,6 +82,8 @@ resource_overrides:
 
 本地标准预检不能执行节点的自定义 VALIDATE_INPUTS，不能证明已安装的节点提交版本、Python/系统依赖或模型文件哈希，也不能检查媒体实际内容。版本证据明确为 unknown。媒体输入当前只校验绑定槽位，最终路径与可读性在上传阶段验证。标准接口未列出的自定义字面类型保留 unknown。
 
+V3 COMBO 按 options 处理；AUTOGROW 按声明前缀/名称与数量展开点分输入；DYNAMICCOMBO 只接纳选中分支的子输入并校验必填项。未覆盖的动态类型不推测。媒体绑定到 image_upload/video_upload 选择器时允许待上传文件名，仍标 pending；普通枚举不获得这种豁免。保存目录仅保留预检所需的类型、范围、选项与分支，不保存节点 UI 默认提示词。
+
 ## 冻结方案与运行
 
 `create_plan` 的 recipe_hash 必须来自当前有效配方记录，完整传入输入与参数；required_nodes 与实际图类型集合完全一致。参数按配方 schema 校验，不能凭任意字符串哈希绕过。草稿冻结参数化图模板、输入哈希、配方 manifest、资源修订、关联文件内容哈希和 graph_hash。
@@ -101,6 +103,6 @@ resource_overrides:
 
 均要求显式项目连接；写请求核对本机来源与实例。页面与 MCP 共用应用用例、修订和预检记录。原件按纯文本显示，不执行 HTML/节点代码。内容按哈希读取，不接受任意文件路径；二进制只返回元数据。资源修订与 blob 保留历史，本轮不做回收，M4 备份与资产治理需纳入其空间占用。
 
-M2/2.1 用标准接口替身验证发现、冲突、图、依赖、过期、冻结、迁移与真实 stdio/HTTP 接口；不能替代本机/远程人物替换真实验收。真实 ComfyUI、Linux、Claude Code/Codex 双宿主仍保留待实测。
+M2/2.1 用标准接口替身验证发现、冲突、图、依赖、过期、冻结、迁移与真实 stdio/HTTP 接口；M2/2.2 使用去除用户素材信息的实际 H3 节点 schema 验证新版输入。远程 ComfyUI 连接与监测已实测；本机 ComfyUI、完整人物替换生成、Linux 项目平台及 Claude Code/Codex 双宿主仍保留待实测。
 
 协议依据：[官方路由](https://docs.comfy.org/development/comfyui-server/comms_routes)、[API 图示例](https://github.com/Comfy-Org/ComfyUI/blob/master/script_examples/basic_api_example.py)、[服务端验证实现](https://github.com/Comfy-Org/ComfyUI/blob/master/comfy_execution/validation.py)。`POST /prompt` 同时承担验证与入队，因此此处不将其作为无副作用预检。

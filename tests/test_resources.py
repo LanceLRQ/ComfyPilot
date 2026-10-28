@@ -5,7 +5,7 @@ import sqlite3
 import pytest
 import yaml
 from comfypilot.project import ProjectError, initialize_project
-from resource_fixture import write_recipe
+from resource_fixture import recipe_record, write_recipe
 
 
 def test_refresh_discovers_sources_and_immutable_file_content_without_importing_code(tmp_path):
@@ -22,7 +22,7 @@ def test_refresh_discovers_sources_and_immutable_file_content_without_importing_
         "demo",
         "video-character-replacement",
     }
-    recipe = snapshot["recipes"][0]
+    recipe = recipe_record(snapshot)
     assert recipe["source"] == "project:modules/demo/recipe.yaml"
     assert recipe["states"]["declaration_complete"] is True
     assert recipe["states"]["real_test"] == "not_run"
@@ -65,7 +65,7 @@ def test_invalid_execution_graph_is_discovered_but_never_declared_executable(tmp
         recipe["outputs"]["main"]["node_id"] = "missing"
     path.write_text(json.dumps(graph))
     (tmp_path / "modules/demo/recipe.yaml").write_text(yaml.safe_dump(recipe))
-    record = refresh_resources(project, 0)["recipes"][0]
+    record = recipe_record(refresh_resources(project, 0))
     assert record["states"]["discovered"] is True
     assert record["states"]["declaration_complete"] is False
     assert record["errors"]
@@ -99,8 +99,8 @@ def test_conflicts_require_explicit_source_mapping_and_preserve_active_revision(
         },
     )
     changed = refresh_resources(project, 1)
-    assert changed["recipes"][0]["source"] == "project:workflows/duplicate/recipe.yaml"
-    assert changed["recipes"][0]["overridden_sources"] == ["project:modules/demo/recipe.yaml"]
+    assert recipe_record(changed)["source"] == "project:workflows/duplicate/recipe.yaml"
+    assert recipe_record(changed)["overridden_sources"] == ["project:modules/demo/recipe.yaml"]
     with pytest.raises(ProjectError) as error:
         refresh_resources(project, 1)
     assert error.value.code == "conflict"
@@ -113,7 +113,7 @@ def test_resource_paths_cannot_escape_and_symlinks_are_not_read(tmp_path):
     recipe = write_recipe(tmp_path)
     recipe["instructions"] = "../secrets.local.yaml"
     (tmp_path / "modules/demo/recipe.yaml").write_text(yaml.safe_dump(recipe))
-    assert refresh_resources(project, 0)["recipes"][0]["states"]["declaration_complete"] is False
+    assert recipe_record(refresh_resources(project, 0))["states"]["declaration_complete"] is False
     (tmp_path / "workflows/escape").symlink_to(tmp_path.parent, target_is_directory=True)
     with pytest.raises(ProjectError) as error:
         refresh_resources(project, 1)
@@ -150,14 +150,18 @@ def test_custom_node_declaration_and_code_are_part_of_frozen_recipe_version(tmp_
     (tmp_path / "modules/demo/recipe.yaml").write_text(yaml.safe_dump(recipe))
     first = refresh_resources(project, 0)
     frozen = freeze_recipe(
-        project, "swap", first["recipes"][0]["hash"], {"video": "b" * 64}, {"seed": 1, "prompt": ""}
+        project,
+        "swap",
+        recipe_record(first)["hash"],
+        {"video": "b" * 64},
+        {"seed": 1, "prompt": ""},
     )
     assert "project:custom_nodes/demo/__init__.py" in frozen["files"]
     assert first["custom_nodes"][0]["manifest"]["version"] == "abc123"
     (folder / "__init__.py").write_text("changed code")
     second = refresh_resources(project, 1)
-    assert second["recipes"][0]["hash"] != first["recipes"][0]["hash"]
-    assert second["recipes"][0]["states"]["real_test"] == "not_run"
+    assert recipe_record(second)["hash"] != recipe_record(first)["hash"]
+    assert recipe_record(second)["states"]["real_test"] == "not_run"
 
 
 def test_resource_root_replaced_with_symlink_is_rejected_after_service_started(tmp_path):
@@ -193,7 +197,7 @@ def test_parameter_cannot_silently_replace_a_declared_model_dependency(tmp_path)
     graph["1"]["inputs"]["prompt"] = "fixed.safetensors"
     graph_path.write_text(json.dumps(graph))
     (tmp_path / "modules/demo/recipe.yaml").write_text(yaml.safe_dump(recipe))
-    record = refresh_resources(project, 0)["recipes"][0]
+    record = recipe_record(refresh_resources(project, 0))
     assert record["states"]["declaration_complete"]
     with pytest.raises(ProjectError) as error:
         freeze_recipe(

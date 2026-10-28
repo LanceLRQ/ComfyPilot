@@ -5,6 +5,7 @@ import sqlite3
 import pytest
 from comfypilot.project import ProjectError
 from comfypilot.resources import get_resource_file, get_resources, refresh_resources
+from resource_fixture import recipe_record
 from test_execution import command, plan_body, prepared
 from test_execution import workspace as execution_workspace
 
@@ -55,7 +56,7 @@ def test_preflight_records_missing_dependencies_and_never_claims_real_test(works
     assert missing["status"] == "missing_dependencies"
     assert "FixtureRender" in missing["missing_nodes"]
     assert all(method == "GET" for method, _ in calls)
-    assert get_resources(project)["recipes"][0]["states"]["real_test"] == "not_run"
+    assert recipe_record(get_resources(project))["states"]["real_test"] == "not_run"
 
 
 def test_claim_rejects_graph_hash_that_does_not_match_frozen_run(workspace):
@@ -111,7 +112,7 @@ def test_declared_missing_model_is_separate_dependency_evidence(workspace):
     from comfypilot.resources import freeze_recipe
 
     project, instance, _ = workspace
-    record = get_resources(project)["recipes"][0]
+    record = recipe_record(get_resources(project))
     frozen = freeze_recipe(
         project,
         "swap",

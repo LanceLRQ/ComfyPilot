@@ -1,0 +1,18 @@
+{
+  "target_id": "replace-with-selected-target-id",
+  "project_id": "replace-with-project-uuid",
+  "config_revision": null,
+  "observed_at": null,
+  "management_channel": "unknown",
+  "core_commit": {"status": "unknown", "value": null},
+  "python_environment": {"status": "unknown", "value": null},
+  "package_freeze_evidence": null,
+  "model_hashes": {"status": "unknown", "files": []},
+  "ffmpeg_and_pyav": {"status": "unknown", "value": null},
+  "queue_before_restart": null,
+  "restart": {"status": "not_run", "evidence": null},
+  "rollback": {"status": "not_run", "previous_environment": null},
+  "standard_preflight": {"status": "not_checked", "recipe_hash": null},
+  "canvas_roundtrip": "not_run",
+  "real_generation": "not_run"
+}

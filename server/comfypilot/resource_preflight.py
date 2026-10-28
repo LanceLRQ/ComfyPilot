@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from comfypilot.monitoring import get_target_status
+from comfypilot.node_schema import select_inputs
 from comfypilot.project import Project, ProjectError
 from comfypilot.recipes import Recipe, content_hash
 from comfypilot.resources import freeze_recipe, get_resources
@@ -21,7 +22,7 @@ def check_frozen_recipe(frozen: dict, target: dict) -> dict:
     unknown = False
     model_bindings = {(model.node_id, model.input_name): model.name for model in recipe.models}
     input_bindings = {
-        (binding.node_id, binding.input_name)
+        (binding.node_id, binding.input_name): slot.kind
         for slot in recipe.inputs.values()
         for binding in slot.bindings
     }
@@ -29,11 +30,12 @@ def check_frozen_recipe(frozen: dict, target: dict) -> dict:
         schema = schemas.get(node["class_type"])
         if schema is None:
             continue
-        for key, field in schema["inputs"].items():
+        fields = select_inputs(schema["inputs"], node["inputs"])
+        for key, field in fields.items():
             if field["required"] and key not in node["inputs"]:
                 errors.append(f"{node_id}.{key} 缺少必填输入")
         for key, value in node["inputs"].items():
-            field = schema["inputs"].get(key)
+            field = fields.get(key)
             if field is None:
                 errors.append(f"{node_id}.{key} 不在目标节点输入定义中")
                 continue
@@ -49,7 +51,7 @@ def check_frozen_recipe(frozen: dict, target: dict) -> dict:
                     errors.append(f"{node_id}.{key} 连线输出序号或类型不匹配")
             elif (node_id, key) in input_bindings:
                 # 媒体路径在后续上传阶段物化，这里只检验绑定槽位。
-                if expected != "STRING":
+                if expected != "STRING" and field.get("upload") != input_bindings[(node_id, key)]:
                     unknown = True
             elif isinstance(expected, list):
                 if value not in expected:

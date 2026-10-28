@@ -1,0 +1,81 @@
+{
+  "core": {
+    "repository": "https://github.com/Comfy-Org/ComfyUI",
+    "version": "0.38.0",
+    "commit": "6b747c0428c343e1417219641db93a4fb7cb69ae",
+    "license": "GPL-3.0",
+    "nodes": [
+      "BasicGuider",
+      "BasicScheduler",
+      "CLIPLoader",
+      "CreateVideo",
+      "GetVideoComponents",
+      "KSamplerSelect",
+      "LoadImage",
+      "LoadVideo",
+      "MiniMaxH3ReferenceToVideo",
+      "PrimitiveStringMultiline",
+      "RandomNoise",
+      "SamplerCustomAdvanced",
+      "SaveVideo",
+      "UNETLoader",
+      "VAEDecode",
+      "VAEDecodeAudio",
+      "VAELoader"
+    ]
+  },
+  "workflow": {
+    "repository": "https://github.com/Comfy-Org/workflow_templates",
+    "commit": "e7cd011d4ded3411c2f481200544f0be6fdc962e",
+    "path": "templates/video_minimax_h3_r2v.json",
+    "sha256": "afeea99e9fd5a1456df348e0573e289c1243f2f28546fc95c1c963f808d61ddb",
+    "license": "MIT"
+  },
+  "models": {
+    "repository": "Comfy-Org/MiniMax-H3",
+    "revision": "e5eb578a89295337b8ff433a035929ce0279e0b6",
+    "files": [
+      {
+        "path": "diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+        "size": 20970379616,
+        "sha256": "9255f52b6677845ad238f20dfaafa94727053694127ab7f255c048f0f9365779"
+      },
+      {
+        "path": "text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+        "size": 15687142551,
+        "sha256": "35a88d51044231fe332301d7a62aa81e3f2cba62febeb446e2c1e3e0ef76f2c6"
+      },
+      {
+        "path": "vae/minimax_h3_audio_vae_fp32.safetensors",
+        "size": 605254808,
+        "sha256": "8e505d95dd1561d47abd43d4238fd40d9bb1ae9e147ed0a4cba778d76ae4db48"
+      },
+      {
+        "path": "vae/minimax_h3_video_vae_int8_convrot.safetensors",
+        "size": 2811065184,
+        "sha256": "52a2c8c73583c86e4f41cdcce3a6ad0ea562987bc0bf3d60a0cef5f5c8e60c0e"
+      }
+    ],
+    "license": {
+      "name": "MiniMax H3 Community License Agreement",
+      "source": "https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/42ed227ee7df40d41602854ae760620d6eb651fe/LICENSE"
+    }
+  },
+  "environment": {
+    "reference_only": true,
+    "python": "3.13.15",
+    "pytorch": "2.13.0+cu130",
+    "gpu": "NVIDIA RTX 3090 24 GiB",
+    "system": "Linux",
+    "ffmpeg": "8.1.1（本机预处理参照，含 ffprobe 和 libx264；目标版本未通过 HTTP 确认）",
+    "python_dependencies": "ComfyUI 固定提交的 requirements.txt（含 PyAV）；安装前按目标 GPU 选择 PyTorch，保留 pip freeze"
+  },
+  "acceptance": {
+    "standard_schema": "per_target_preflight_required",
+    "core_commit_on_target": "unknown",
+    "model_hashes_on_target": "unknown",
+    "ffmpeg_on_target": "unknown",
+    "canvas_roundtrip": "not_run",
+    "real_generation": "not_run"
+  }
+}

@@ -12,7 +12,7 @@ from comfy_fixture import comfy_server
 from comfypilot.project import ExecutionTarget, ProjectError, initialize_project
 from comfypilot.resources import get_resources, refresh_resources
 from comfypilot.settings import get_project, update_project
-from resource_fixture import write_recipe
+from resource_fixture import recipe_record, write_recipe
 
 
 @pytest.fixture
@@ -64,7 +64,7 @@ def plan_body(project, task_id, *, count=2, limit=2):
         "steps": [
             {
                 "recipe_id": "swap",
-                "recipe_hash": get_resources(project)["recipes"][0]["hash"],
+                "recipe_hash": recipe_record(get_resources(project))["hash"],
                 "inputs": {"video": "b" * 64},
                 "parameters": {"seed": index, "prompt": ""},
                 "target_id": "render",
@@ -75,7 +75,7 @@ def plan_body(project, task_id, *, count=2, limit=2):
         "mandate": {
             "instruction": "用户允许制作这两个候选，失败停止",
             "source": "用户对话",
-            "allowed_recipes": {"swap": get_resources(project)["recipes"][0]["hash"]},
+            "allowed_recipes": {"swap": recipe_record(get_resources(project))["hash"]},
             "allowed_targets": ["render"],
             "allowed_inputs": {"video": "b" * 64},
             "allowed_parameters": {"seed": list(range(count)), "prompt": [""]},
@@ -480,7 +480,7 @@ def test_real_stdio_and_http_share_command_receipts_and_control_boundary(workspa
             assert resources["revision"] == 1
             refreshed = await tool("refresh_resources", **ref, expected_revision=1)
             assert refreshed["hash"] == resources["hash"]
-            resource_hash = resources["recipes"][0]["files"]["project:modules/demo/canvas.json"]
+            resource_hash = recipe_record(resources)["files"]["project:modules/demo/canvas.json"]
             original = await tool("get_resource_file", **ref, resource_hash=resource_hash)
             assert json.loads(original["text"])["version"] == 0.4
             await tool("probe_target", **ref, target_id="render")
