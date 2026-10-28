@@ -73,6 +73,13 @@ def test_builtin_h3_graph_binds_media_parameters_and_output_without_uploading(h3
         "key": "images",
         "kind": "video",
         "filename_prefix": {"node_id": "92", "input_name": "filename_prefix"},
+        "spec": {
+            "width": 768,
+            "height": 448,
+            "fps": 24.0,
+            "frame_count": 124,
+            "duration_seconds": 124 / 24,
+        },
     }
     assert frozen["graph"]["92"]["inputs"]["format"] == "mp4"
     assert frozen["graph"]["92"]["inputs"]["format.codec"] == "h264"

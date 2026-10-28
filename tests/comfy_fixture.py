@@ -75,12 +75,13 @@ def comfy_server(
         generation.setdefault("posts", []).append(body)
         if generation.get("reject"):
             return JSONResponse({"error": {"type": "prompt_invalid"}, "node_errors": {}}, 400)
-        row = [0, "fixture-prompt", body["prompt"], body["extra_data"], ["1"]]
+        identifier = "fixture-prompt" if len(generation["posts"]) == 1 else "fixture-prompt-2"
+        row = [0, identifier, body["prompt"], body["extra_data"], ["1"]]
         generation["running"] = [row]
         generation["prompt"] = row
         if generation.get("lost_receipt"):
             return Response("{", media_type="application/json")
-        return {"prompt_id": "fixture-prompt", "number": 0, "node_errors": {}}
+        return {"prompt_id": identifier, "number": 0, "node_errors": {}}
 
     @app.get("/history")
     @app.get("/history/{prompt_id}")
@@ -97,11 +98,14 @@ def comfy_server(
         return {
             "FixtureRender": {
                 "input": {
+                    "optional": {"filename_prefix": ["STRING", {}]}
+                    if generation is not None
+                    else {},
                     "required": {
                         "video": ["STRING", {}],
                         "seed": ["INT", {"min": 0, "max": 1000}],
                         "prompt": ["STRING", {}],
-                    }
+                    },
                 },
                 "output": ["IMAGE"],
                 "output_node": True,

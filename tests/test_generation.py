@@ -1,8 +1,10 @@
 import asyncio
+import json
 import os
 from uuid import uuid4
 
 import pytest
+import yaml
 from comfy_fixture import comfy_server
 from comfypilot.execution import get_execution
 from comfypilot.project import initialize_project
@@ -21,7 +23,16 @@ def generation_workspace(tmp_path, media_files):
     state = {}
     with comfy_server(busy=False, generation=state) as (address, calls, _):
         project = initialize_project(tmp_path / "project")
-        write_recipe(project.root)
+        recipe = write_recipe(project.root)
+        recipe["outputs"]["main"].update(
+            filename_prefix={"node_id": "1", "input_name": "filename_prefix"},
+            spec={"width": 64, "height": 48, "fps": 24, "frame_count": 96, "duration_seconds": 4},
+        )
+        (project.root / "modules/demo/recipe.yaml").write_text(yaml.safe_dump(recipe))
+        graph_path = project.root / "modules/demo/api.json"
+        graph = json.loads(graph_path.read_text())
+        graph["1"]["inputs"]["filename_prefix"] = "output"
+        graph_path.write_text(json.dumps(graph))
         refresh_resources(project, 0)
         for role in ("input", "output"):
             (tmp_path / role).mkdir()

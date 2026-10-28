@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
+from comfypilot.collection import run_collection
 from comfypilot.generation import run_generation
 from comfypilot.media import run_media_jobs
 from comfypilot.monitoring import monitor_targets
@@ -29,6 +30,7 @@ def run_worker(project: Project, instance_id: UUID) -> None:
                     monitors = group.create_task(monitor_targets(project, instance_id))
                     media = group.create_task(run_media_jobs(project))
                     generation = group.create_task(run_generation(project, instance_id))
+                    collection = group.create_task(run_collection(project))
                     while not stopped.is_set():
                         with db:
                             db.execute(
@@ -50,6 +52,7 @@ def run_worker(project: Project, instance_id: UUID) -> None:
                     monitors.cancel()
                     media.cancel()
                     generation.cancel()
+                    collection.cancel()
             finally:
                 with db:
                     db.execute(

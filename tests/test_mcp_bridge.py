@@ -12,6 +12,7 @@ from comfypilot.project import initialize_project, resolve_project_root
 from mcp import Client, StdioServerParameters
 
 TOOLS = {
+    "list_versions",
     "list_replicas",
     "list_assets",
     "get_asset",

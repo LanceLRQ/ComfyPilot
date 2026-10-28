@@ -53,12 +53,22 @@ class Parameter(BaseModel):
     maximum: int | float | None = None
 
 
+class MediaSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True, allow_inf_nan=False)
+    width: int | None = Field(default=None, gt=0)
+    height: int | None = Field(default=None, gt=0)
+    fps: float | None = Field(default=None, gt=0)
+    frame_count: int | None = Field(default=None, gt=0)
+    duration_seconds: float | None = Field(default=None, gt=0)
+
+
 class Output(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     node_id: Text
     key: Name
     kind: Literal["video", "image"]
     filename_prefix: Binding | None = None
+    spec: MediaSpec | None = None
 
 
 class ModelDependency(BaseModel):

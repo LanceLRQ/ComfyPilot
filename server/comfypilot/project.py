@@ -206,7 +206,7 @@ def migrate_database(project: Project) -> None:
         db.execute("PRAGMA journal_mode=WAL")
         db.execute("BEGIN IMMEDIATE")
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 8:
+        if version > 9:
             raise ProjectError("unsupported_schema", "数据库格式比当前程序更新，请使用对应版本。")
         db.execute(
             "CREATE TABLE IF NOT EXISTS project "
@@ -286,6 +286,16 @@ def migrate_database(project: Project) -> None:
 
             initialize_replica_schema(db)
             db.execute("PRAGMA user_version=8")
+        if version < 9:
+            from comfypilot.collection import initialize_collection_schema
+
+            initialize_collection_schema(db)
+            db.execute("DROP INDEX IF EXISTS one_active_generation")
+            db.execute(
+                "CREATE UNIQUE INDEX one_active_generation ON execution_runs((1)) "
+                "WHERE status IN ('dispatching','submitted','running','reconciling')"
+            )
+            db.execute("PRAGMA user_version=9")
 
 
 def read_dispatch(project: Project) -> dict[str, bool | str]:
@@ -328,7 +338,7 @@ def read_project(root: Path) -> Project:
     identity = ProjectIdentity.model_validate_json((state / "project.json").read_text("utf-8"))
     with closing(sqlite3.connect((state / "state.sqlite").as_uri() + "?mode=ro", uri=True)) as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 8:
+        if version > 9:
             raise ProjectError("unsupported_schema", "数据库格式比当前程序更新，请使用对应版本。")
         if version >= 3:
             row = db.execute(

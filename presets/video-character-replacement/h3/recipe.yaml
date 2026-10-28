@@ -77,6 +77,12 @@ outputs:
     node_id: '92'
     key: images
     kind: video
+    spec:
+      width: 768
+      height: 448
+      fps: 24
+      frame_count: 124
+      duration_seconds: 5.166666666666667
     filename_prefix:
       node_id: '92'
       input_name: filename_prefix

@@ -5,6 +5,7 @@ import { Assets } from "./Assets";
 import { Monitor } from "./Monitor";
 import { Resources } from "./Resources";
 import { Settings } from "./Settings";
+import { Versions } from "./Versions";
 import "./style.css";
 
 const projectSchema = z.object({
@@ -184,6 +185,7 @@ function App() {
         <Settings />
         <Resources />
         <Assets />
+        <Versions />
         <footer>
           <span>仅本机访问 · 所有项目数据保存在当前目录</span>
           <span>{updatedAt ? `更新于 ${updatedAt} · 每 5 秒刷新` : "正在读取…"}</span>

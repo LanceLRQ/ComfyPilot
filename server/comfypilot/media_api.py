@@ -1,10 +1,11 @@
 import asyncio
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import FileResponse
 
+from comfypilot.collection import get_version, list_versions, version_path
 from comfypilot.media import (
     CHUNK_BYTES,
     AssetRequest,
@@ -41,6 +42,35 @@ def install_media_routes(app: FastAPI, project: Project, runtime: RuntimeRecord)
     @app.get("/api/assets")
     def assets():
         return reply(list_assets(project))
+
+    @app.get("/api/versions")
+    def versions():
+        return reply(list_versions(project))
+
+    @app.get("/api/versions/{version_id}/content")
+    def version_content(version_id: UUID, variant: Literal["original", "preview"] = "preview"):
+        path = version_path(project, str(version_id), variant)
+        version = get_version(project, str(version_id))
+        media = (
+            version["proxy"]["media"]
+            if variant == "preview" and version["proxy"]
+            else version["media"]
+        )
+        mime = (
+            {"png": "image/png", "mjpeg": "image/jpeg", "webp": "image/webp"}[media["codec"]]
+            if version["kind"] == "image"
+            else "video/mp4"
+            if "mp4" in media["container"]
+            else "video/webm"
+            if "webm" in media["container"]
+            else "video/x-matroska"
+        )
+        return FileResponse(
+            path,
+            media_type=mime,
+            content_disposition_type="inline",
+            headers={"X-Content-Type-Options": "nosniff"},
+        )
 
     @app.post("/api/assets/get")
     def asset(body: AssetRequest):

@@ -155,6 +155,7 @@ class ApplicationReply(BaseModel):
 
 
 PROJECT_API = {
+    "list_versions": ("GET", "/api/versions"),
     "list_replicas": ("GET", "/api/assets/replicas"),
     "list_assets": ("GET", "/api/assets"),
     "get_asset": ("POST", "/api/assets/get"),
@@ -192,6 +193,7 @@ PROJECT_API = {
 
 # 仅定义静态协议元数据；不得在此探测项目、服务或 ComfyUI。
 TOOL_DEFINITIONS = {
+    "list_versions": (ConnectionArguments, "读取已校验的可审版本、来源和技术检查。", True, True),
     "list_replicas": (
         ConnectionArguments,
         "读取本项目已登记的目标副本、指纹和引用，不扫描未知文件。",

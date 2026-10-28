@@ -407,9 +407,9 @@ def reserve_submission(
             raise ProjectError("dispatch_paused", "派发仍被手动暂停、审片挂起或待核对状态阻止。")
         if db.execute(
             "SELECT id FROM execution_runs WHERE status IN "
-            "('dispatching','submitted','running','reconciling','collecting')"
+            "('dispatching','submitted','running','reconciling')"
         ).fetchone():
-            raise ProjectError("dispatch_busy", "项目已有在途生成或收片，串行等待。")
+            raise ProjectError("dispatch_busy", "项目已有在途生成，串行等待。")
         if row["used_submissions"] >= plan.mandate.max_submissions:
             raise ProjectError("mandate_exceeded", "提交额度已耗尽；不明提交仍占用额度。")
         if (
