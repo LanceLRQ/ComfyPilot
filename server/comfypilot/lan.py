@@ -25,7 +25,7 @@ def review_route(path: str, method: str) -> bool:
         }
         or bool(
             re.fullmatch(
-                r"/api/(versions/[a-f0-9-]{36}(/content)?|assets/[a-f0-9-]{36}/content|review/screenshots/[a-f0-9-]{36})",
+                r"/api/(versions/[a-f0-9-]{36}(/content|/poster)?|assets/[a-f0-9-]{36}/(content|poster)|review/screenshots/[a-f0-9-]{36})",
                 path,
             )
         )

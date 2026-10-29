@@ -360,7 +360,12 @@ export function Assets() {
           <article className="target-editor" key={asset.id}>
             <strong>{asset.filename}</strong>
             {asset.kind === "video" ? (
-              <video controls preload="metadata" src={`/api/assets/${asset.id}/content`}>
+              <video
+                controls
+                preload="metadata"
+                poster={`/api/assets/${asset.id}/poster`}
+                src={`/api/assets/${asset.id}/content`}
+              >
                 <track kind="captions" />
               </video>
             ) : (

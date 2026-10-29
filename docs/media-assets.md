@@ -63,6 +63,10 @@ HTTP 统一返回项目/实例身份与 data，错误为结构化 code/message�
 | `POST /api/assets/clips` | JSON 显式片段参数 |
 | `POST /api/assets/jobs/get`、`POST /api/assets/get` | 按任务/素材 ID 查询 |
 | `GET /api/assets/{asset_id}/content` | 受管文件读取与 Range 预览 |
+| `GET /api/assets/{asset_id}/poster` | 受管视频或图片的 JPEG 预览 |
+| `GET /api/versions/{version_id}/poster?view=candidate\|source` | 候选播放代理首帧，或对应原片/输入片段起点预览 |
+
+poster 为按需生成、最多 480×270 的真实 JPEG，缓存在 `.comfypilot/cache/posters/`，可重建；不替换正式原件、代理或内容哈希，不增加素材和生成记录。读取前仍校验源 ID 和受管路径。FFmpeg 缺失、无法解码或超时会返回明确错误，缩略图显示不可用，视频内容和审片决定仍走原入口；不填充虚构预览。原片预览偏移只取已核实映射，未知时使用输入片段 0 秒。实现与审片入口见[第三批 UI](review-workbench.md#第三批手机专注审片与预览时间轴)。
 
 写操作需 `X-ComfyPilot-Instance`。缺工具提示安装并加入平台 PATH；无空间提示释放空间；损坏媒体、错误类型和越界范围给出具体原因。外部进程探测最长 30 秒，解码/提取每次最长 300 秒，超时任务阻塞，用户可先在外部缩短素材再重新提交。
 

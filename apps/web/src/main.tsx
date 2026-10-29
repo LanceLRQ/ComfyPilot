@@ -77,7 +77,7 @@ function App() {
   const local = project?.local_control === true;
   const active = !local && (view === "assets" || view === "project") ? "review" : view;
   return (
-    <div className="shell">
+    <div className="shell" data-view={active}>
       <header className="topbar">
         <a className="brand" href="#review" aria-label="ComfyPilot 审片首页">
           <span className="brand-mark" aria-hidden="true">

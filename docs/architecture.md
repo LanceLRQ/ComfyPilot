@@ -327,6 +327,10 @@ Web 使用四个 hash 视图，默认 review，另有 tasks、assets、project�
 
 SidePanel 复用原生 dialog：反馈在宽度至少 1200 px 时通过 show 与舞台并排，较窄时通过 showModal 展示；RunDrawer 始终为模态抽屉。原生模态提供背景 inert，组件处理 Tab/Shift+Tab 循环、Esc、初始焦点与返回入口；断点切换保留同一内容 DOM。Feedback 常驻于面板内，沿用按版本索引的草稿与原命令；开关不卸载或重挂播放器。运行选择提升至 App，从候选/任务条目打开，切视图关闭抽屉；摘要复用 WorkspaceProvider，完整证据仅本机按按钮 GET 既有 evidence 接口，关闭中止未完成读取，不增加轮询或写命令。
 
+手机单路/双路仅通过 CSS 切换可见性，两路 video 保持挂载并复用 comparison 控制器；宽屏始终双路。候选选择器使用可收起的缩略图列表，沿用原版本选择与草稿索引。ReviewTimeline 从同一 WorkspaceProvider 快照过滤当前版本反馈，以候选秒数和共同比对时长绘制点、区间与游标；定位先 pause 再 seek，复用现有反馈面板，不引入写命令或 original_range 推算。
+
+`GET /api/assets/{id}/poster` 与 `GET /api/versions/{id}/poster?view=candidate|source` 按需读取受管素材/播放代理；source 复用已核实的映射偏移，未知映射取输入片段起点。服务端先校验登记 ID 与原路径，再用 FFmpeg 本地协议/格式白名单生成最长 480×270 的 JPEG，15 秒超时，单实例串行解码。缓存位于项目 `.comfypilot/cache/posters/`，按内容文件名与偏移标识；临时目录退出时清理，成功后原子替换。缓存不登记为候选、不修改源文件或业务修订；LAN 只读白名单允许预览，不开放管理。返回私有缓存与 nosniff，失败沿用结构化错误，前端保留媒体和业务入口。
+
 Feedback 绑定 artifact_version_id，包含整份说明、video_range、截图引用和归一化矩形。视频保存片段内时间及原片映射。播放器共用控制条，以参考视频为主时钟做 80 ms 纠偏、缓冲联动和按候选实际 FPS 逐帧查看。已知映射换算完整原片偏移；变速或偏移未知时按输入片段相对时间联动，显示“按时间对照，不保证动作逐帧一致”，comparison 仍为 unknown，反馈 original_range 仍为空。播放联动不修改配方、Run、授权范围或累计额度。
 
 用户可用“需要修改”“通过并采用”和备注完成主要操作。“需要修改”对当前有效方案写反馈并在同一事务设 review_hold；Worker 领取和保存 intent 前都检查。已写 intent 属于在途，不承诺撤回；其他未关联任务不受影响。

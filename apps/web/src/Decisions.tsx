@@ -101,9 +101,10 @@ export function Decisions({
           type="button"
           disabled={busy || stale || adopted || version.checks.status !== "passed"}
           className="primary"
+          aria-label="通过并采用当前候选"
           onClick={() => void decide("adopt")}
         >
-          通过并采用当前候选
+          采用当前候选
         </button>
         <button type="button" disabled={busy || stale} onClick={() => void decide("reject")}>
           拒绝当前候选

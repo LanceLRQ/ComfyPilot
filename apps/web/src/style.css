@@ -628,3 +628,216 @@ html:has(dialog:modal) {
     flex-wrap: wrap;
   }
 }
+.candidate-picker {
+  margin-bottom: 12px;
+}
+.candidate-picker > summary {
+  cursor: pointer;
+  padding: 10px 0;
+  min-height: 44px;
+}
+.settings .candidate-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  margin: 4px 0;
+  padding: 4px;
+}
+.candidate-list button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  padding: 8px;
+}
+.candidate-list button[aria-pressed="true"],
+.mobile-review-views button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: #172a20;
+}
+.candidate-image {
+  display: grid;
+  place-items: center;
+  width: 96px;
+  aspect-ratio: 16 / 9;
+  flex: none;
+  background: #101512;
+  color: var(--muted);
+  font-size: 12px;
+}
+.candidate-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.candidate-image:has(img:not([hidden])) > span {
+  display: none;
+}
+.candidate-caption {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.candidate-caption small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.mobile-review-views {
+  display: none;
+}
+.review-timeline {
+  margin: 20px 0;
+}
+.timeline-scale {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 12px;
+  margin: 12px 0 4px;
+  padding-left: 170px;
+}
+.timeline-lanes {
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px;
+}
+.settings .timeline-row {
+  width: 100%;
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  margin-bottom: 4px;
+  text-align: left;
+}
+.timeline-caption {
+  display: grid;
+  min-width: 0;
+  font-size: 12px;
+}
+.timeline-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.timeline-track {
+  display: block;
+  position: relative;
+  height: 20px;
+  margin-right: 6px;
+  background: #141917;
+}
+.timeline-range,
+.timeline-playhead {
+  position: absolute;
+  height: 100%;
+  min-width: 4px;
+  background: var(--accent);
+}
+.timeline-row[data-status="addressed"] .timeline-range {
+  background: #aeb9b0;
+}
+.timeline-row[data-status="verified"] .timeline-range {
+  background: #65786a;
+}
+.timeline-playhead {
+  min-width: 2px;
+  background: #e9ede6;
+}
+@media (max-width: 480px) {
+  .shell[data-view="review"] .topbar {
+    min-height: 48px;
+    padding: 8px 0;
+  }
+  .shell[data-view="review"] .project-name {
+    order: 0;
+    width: auto;
+    max-width: 72px;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .shell[data-view="review"] main {
+    padding-top: 12px;
+  }
+  .review-workbench {
+    margin-top: 8px;
+    padding: 12px;
+  }
+  .review-clips:has(> :only-child) {
+    display: none;
+  }
+
+  .review-clips > button {
+    width: 100%;
+  }
+  .settings .mobile-review-views {
+    display: flex;
+    gap: 8px;
+    margin: 0 0 8px;
+  }
+  .mobile-review-views button {
+    flex: 1;
+  }
+  .review-detail[data-mobile-view="candidate"] .review-panes > figure:nth-child(2),
+  .review-detail[data-mobile-view="source"] .review-panes > figure:first-child {
+    display: none;
+  }
+  .review-detail[data-mobile-view="both"] .review-panes {
+    grid-template-columns: 1fr 1fr;
+  }
+  .review-panes figcaption {
+    margin-top: 0;
+  }
+  .review-tools {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #1b221e;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .review-tools .comparison-controls {
+    margin: 8px 0 0;
+  }
+  .comparison-controls input[type="range"] {
+    order: 1;
+    flex-basis: 100%;
+    padding: 4px;
+    min-height: 44px;
+  }
+  .review-tools > .settings-note {
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .review-tools .review-decision {
+    margin-top: 8px;
+    padding-top: 8px;
+  }
+  .review-decision .resource-actions {
+    gap: 8px;
+  }
+  .review-decision .resource-actions button {
+    padding: 8px;
+    flex: 1;
+  }
+  .review-decision .media-details {
+    margin: 12px 0;
+  }
+  .review-clips small {
+    display: inline;
+    margin-left: 8px;
+  }
+  .timeline-scale {
+    padding-left: 116px;
+  }
+  .settings .timeline-row {
+    grid-template-columns: 100px minmax(0, 1fr);
+    gap: 8px;
+  }
+}

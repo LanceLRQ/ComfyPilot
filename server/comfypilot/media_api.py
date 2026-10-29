@@ -26,6 +26,7 @@ from comfypilot.media import (
     queue_upload,
 )
 from comfypilot.media_tools import require_tools
+from comfypilot.posters import poster_path
 from comfypilot.project import Project, ProjectError
 from comfypilot.replicas import list_replicas
 from comfypilot.review import get_review_version
@@ -34,6 +35,20 @@ from comfypilot.settings import get_project
 
 
 def install_media_routes(app: FastAPI, project: Project, runtime: RuntimeRecord) -> None:
+    poster_gate = asyncio.Semaphore(1)
+
+    async def poster(source, seconds=0):
+        async with poster_gate:
+            path = await poster_path(project, source, seconds)
+        return FileResponse(
+            path,
+            media_type="image/jpeg",
+            headers={
+                "Cache-Control": "private, max-age=86400",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
     def reply(data):
         return {
             "project_id": str(project.identity.project_id),
@@ -83,6 +98,21 @@ def install_media_routes(app: FastAPI, project: Project, runtime: RuntimeRecord)
             content_disposition_type="inline",
             headers={"X-Content-Type-Options": "nosniff"},
         )
+
+    @app.get("/api/versions/{version_id}/poster")
+    async def version_poster(version_id: UUID, view: Literal["candidate", "source"] = "candidate"):
+        if view == "candidate":
+            return await poster(version_path(project, str(version_id), "preview"))
+        mapping = get_review_version(project, str(version_id))["comparison"]
+        if not mapping["source_asset_id"]:
+            raise ProjectError("poster_unavailable", "没有可用的视频参考。")
+        return await poster(
+            asset_path(project, mapping["source_asset_id"]), mapping.get("offset_seconds", 0)
+        )
+
+    @app.get("/api/assets/{asset_id}/poster")
+    async def asset_poster(asset_id: UUID):
+        return await poster(asset_path(project, str(asset_id)))
 
     @app.post("/api/assets/get")
     def asset(body: AssetRequest):

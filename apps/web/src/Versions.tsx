@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createComparisonPlayback, type PlaybackState } from "./comparison";
 import { Decisions, Delivery } from "./Decisions";
 import { Feedback } from "./Feedback";
+import { ReviewTimeline } from "./ReviewTimeline";
 import { SidePanel } from "./SidePanel";
 import { useWorkspace, workspaceSchema } from "./Workspace";
 
@@ -49,6 +50,7 @@ function ReviewPlayer({
   onOpenRun: (id: string) => void;
 }) {
   const original = useRef<HTMLVideoElement>(null);
+  const [mobileView, setMobileView] = useState("candidate");
   const [detail, setDetail] = useState<z.infer<typeof detailSchema>["data"] | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -94,12 +96,36 @@ function ReviewPlayer({
   const url = `/api/versions/${version.id}/content`;
 
   return (
-    <article className="review-detail">
+    <article className="review-detail" data-mobile-view={mobileView}>
+      {version.kind === "video" && (
+        <fieldset className="mobile-review-views" aria-label="手机审片画面">
+          {Object.entries({ candidate: "结果", source: "原片", both: "对照" }).map(
+            ([view, label]) => (
+              <button
+                key={view}
+                type="button"
+                aria-pressed={mobileView === view}
+                onClick={() => setMobileView(view)}
+              >
+                {label}
+              </button>
+            ),
+          )}
+        </fieldset>
+      )}
       <div className="review-panes">
         <figure>
           <figcaption>候选结果</figcaption>
           {version.kind === "video" ? (
-            <video ref={candidate} muted playsInline preload="auto" src={url} aria-label="候选结果">
+            <video
+              ref={candidate}
+              muted
+              playsInline
+              preload="auto"
+              src={url}
+              poster={`/api/versions/${version.id}/poster`}
+              aria-label="候选结果"
+            >
               <track kind="captions" />
             </video>
           ) : (
@@ -117,6 +143,7 @@ function ReviewPlayer({
               muted
               playsInline
               preload="auto"
+              poster={`/api/versions/${version.id}/poster?view=source`}
               aria-label="原片参考"
               src={`/api/assets/${mapping.source_asset_id}/content`}
             >
@@ -127,53 +154,67 @@ function ReviewPlayer({
           )}
         </figure>
       </div>
+      <div className="review-tools">
+        {version.kind === "video" && (
+          <>
+            <fieldset className="comparison-controls" aria-label="对照播放控制">
+              <button
+                type="button"
+                disabled={!playback.duration}
+                onClick={() => controllerRef.current?.toggle()}
+              >
+                {playback.playing ? "暂停" : playback.status === "ended" ? "重播" : "播放"}
+              </button>
+              <button
+                type="button"
+                aria-label="上一帧"
+                disabled={!playback.duration || !playback.frameSeconds}
+                onClick={() => controllerRef.current?.step(-1)}
+              >
+                −1 帧
+              </button>
+              <button
+                type="button"
+                aria-label="下一帧"
+                disabled={!playback.duration || !playback.frameSeconds}
+                onClick={() => controllerRef.current?.step(1)}
+              >
+                +1 帧
+              </button>
+              <input
+                type="range"
+                aria-label="对照播放进度"
+                min="0"
+                max={playback.duration}
+                step="0.001"
+                value={playback.time}
+                disabled={!playback.duration}
+                onChange={(event) => controllerRef.current?.seek(Number(event.target.value))}
+              />
+              <output>
+                {playback.time.toFixed(3)} / {playback.duration.toFixed(3)} 秒
+              </output>
+            </fieldset>
+            <p role="status" className={playback.status === "error" ? "error" : "settings-note"}>
+              {playback.message} · 按时间对照，不保证动作逐帧一致。
+              {!playback.frameSeconds && "视频帧率未知，逐帧查看暂不可用。"}
+            </p>
+          </>
+        )}
+        <Decisions version={version} feedbackOpen={feedbackOpen} onFeedback={onFeedback} />
+      </div>
       {version.kind === "video" && (
-        <>
-          <fieldset className="comparison-controls" aria-label="对照播放控制">
-            <button
-              type="button"
-              disabled={!playback.duration}
-              onClick={() => controllerRef.current?.toggle()}
-            >
-              {playback.playing ? "暂停" : playback.status === "ended" ? "重播" : "播放"}
-            </button>
-            <button
-              type="button"
-              aria-label="上一帧"
-              disabled={!playback.duration || !playback.frameSeconds}
-              onClick={() => controllerRef.current?.step(-1)}
-            >
-              −1 帧
-            </button>
-            <button
-              type="button"
-              aria-label="下一帧"
-              disabled={!playback.duration || !playback.frameSeconds}
-              onClick={() => controllerRef.current?.step(1)}
-            >
-              +1 帧
-            </button>
-            <input
-              type="range"
-              aria-label="对照播放进度"
-              min="0"
-              max={playback.duration}
-              step="0.001"
-              value={playback.time}
-              disabled={!playback.duration}
-              onChange={(event) => controllerRef.current?.seek(Number(event.target.value))}
-            />
-            <output>
-              {playback.time.toFixed(3)} / {playback.duration.toFixed(3)} 秒
-            </output>
-          </fieldset>
-          <p role="status" className={playback.status === "error" ? "error" : "settings-note"}>
-            {playback.message} · 按时间对照，不保证动作逐帧一致。
-            {!playback.frameSeconds && "视频帧率未知，逐帧查看暂不可用。"}
-          </p>
-        </>
+        <ReviewTimeline
+          versionId={version.id}
+          duration={playback.duration}
+          time={playback.time}
+          onLocate={(time) => {
+            controllerRef.current?.pause();
+            controllerRef.current?.seek(time);
+            onFeedback();
+          }}
+        />
       )}
-      <Decisions version={version} feedbackOpen={feedbackOpen} onFeedback={onFeedback} />
       <button type="button" aria-haspopup="dialog" onClick={() => onOpenRun(version.run_id)}>
         查看当前候选运行详情
       </button>
@@ -228,6 +269,7 @@ export function Versions({
   const [clip, setClip] = useState("");
   const [choices, setChoices] = useState<Record<string, string>>({});
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const groups = new Map<string, Version[]>();
   for (const version of versions.filter((item) => item.ready)) {
     const key = clipKey(version);
@@ -263,7 +305,7 @@ export function Versions({
     failed: "检查失败",
   };
   return (
-    <section className="workspace settings" aria-labelledby="versions-title">
+    <section className="workspace settings review-workbench" aria-labelledby="versions-title">
       <div className="section-heading">
         <h2 id="versions-title">逐段审片</h2>
         <span>选择片段与候选</span>
@@ -292,7 +334,7 @@ export function Versions({
               aria-pressed={key === activeClip}
               onClick={() => setClip(key)}
             >
-              片段 {clipSegment(items[0]).slice(0, 8)}
+              片段 {Array.from(groups.keys()).indexOf(key) + 1}
               <small>
                 {items.length} 个候选 · {items[0].slot}
               </small>
@@ -301,22 +343,70 @@ export function Versions({
         </nav>
         {selected && (
           <div className="review-stage">
-            <label>
-              审阅候选
-              <select
-                aria-label="审阅候选"
-                value={selected.id}
-                onChange={(event) =>
-                  setChoices((previous) => ({ ...previous, [activeClip]: event.target.value }))
-                }
-              >
-                {candidates.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.id.slice(0, 8)} · {item.source.target_snapshot.target.id} · 检查通过
-                  </option>
-                ))}
-              </select>
-            </label>
+            <details
+              className="candidate-picker"
+              open={pickerOpen}
+              onToggle={(event) => setPickerOpen(event.currentTarget.open)}
+            >
+              <summary>
+                审阅候选 · {selected.id.slice(0, 8)} · {candidates.length} 个候选
+              </summary>
+              <fieldset className="candidate-list" aria-label="候选缩略图">
+                {[...candidates].reverse().map((item, index) => {
+                  const adopted = snapshot?.data.adoptions.some(
+                    (entry) => entry.version_id === item.id,
+                  );
+                  const pending =
+                    snapshot?.data.feedback.filter(
+                      (entry) =>
+                        entry.version_id === item.id &&
+                        entry.kind === "needs_changes" &&
+                        entry.status !== "verified",
+                    ).length ?? 0;
+                  const rejected =
+                    snapshot?.data.decisions.find((entry) => entry.version_id === item.id)
+                      ?.decision === "reject";
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      aria-label={`审阅候选 ${item.id.slice(0, 8)}`}
+                      aria-pressed={selected.id === item.id}
+                      onClick={() => {
+                        setChoices((previous) => ({ ...previous, [activeClip]: item.id }));
+                        if (window.matchMedia("(max-width: 800px)").matches) setPickerOpen(false);
+                      }}
+                    >
+                      <span className="candidate-image">
+                        <img
+                          loading="lazy"
+                          src={`/api/versions/${item.id}/poster`}
+                          alt=""
+                          onError={(event) => {
+                            event.currentTarget.hidden = true;
+                          }}
+                        />
+                        <span>预览不可用</span>
+                      </span>
+                      <span className="candidate-caption">
+                        <strong>
+                          候选 {index + 1} · {item.id.slice(0, 8)}
+                        </strong>
+                        <span>
+                          {new Date(item.created_at).toLocaleTimeString("zh-CN", { hour12: false })}{" "}
+                          · {item.source.target_snapshot.target.name}
+                        </span>
+                        <small>
+                          检查{item.checks.status === "passed" ? "通过" : item.checks.status} ·{" "}
+                          {adopted ? "用户已采用" : rejected ? "用户已拒绝" : "尚未采用"}
+                          {pending ? ` · ${pending} 条待复核` : ""}
+                        </small>
+                      </span>
+                    </button>
+                  );
+                })}
+              </fieldset>
+            </details>
             <ReviewPlayer
               key={selected.id}
               version={selected}
