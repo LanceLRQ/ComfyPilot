@@ -3,8 +3,6 @@ import { z } from "zod";
 import { createComparisonPlayback, type PlaybackState } from "./comparison";
 import { Decisions, Delivery } from "./Decisions";
 import { Feedback } from "./Feedback";
-import { Monitor } from "./Monitor";
-import { ProductionActivity } from "./ProductionActivity";
 import { useWorkspace, workspaceSchema } from "./Workspace";
 
 const versionSchema = workspaceSchema.shape.data.shape.versions.element;
@@ -90,14 +88,6 @@ function ReviewPlayer({
 
   return (
     <article className="review-detail">
-      <div className="section-heading">
-        <h3>候选 {version.id.slice(0, 8)}</h3>
-        <span>检查：{version.checks.status === "passed" ? "通过" : version.checks.status}</span>
-      </div>
-      <p className="settings-note">
-        运行 {version.run_id.slice(0, 8)} · {version.source.target_snapshot.target.name} ·{" "}
-        {version.media.width} × {version.media.height} · {version.media.frame_count ?? "未知"} 帧
-      </p>
       <div className="review-panes">
         <figure>
           <figcaption>候选结果</figcaption>
@@ -171,31 +161,36 @@ function ReviewPlayer({
             </output>
           </fieldset>
           <p role="status" className={playback.status === "error" ? "error" : "settings-note"}>
-            {playback.message}
-          </p>
-          <p className="settings-note">
-            按时间对照，不保证动作逐帧一致。
+            {playback.message} · 按时间对照，不保证动作逐帧一致。
             {!playback.frameSeconds && "视频帧率未知，逐帧查看暂不可用。"}
           </p>
         </>
       )}
-      <p className="settings-note">
-        {mapping?.reason ?? "正在读取时间映射…"}
-        {mapping?.status === "known" && ` 原片时间 = 候选时间 + ${mapping.offset_seconds} 秒。`}
-      </p>
+      <Decisions version={version} />
       {error && (
         <p className="error" role="alert">
           {error}
         </p>
       )}
-      <div className="settings-actions">
-        <a href={`${url}?variant=original`}>下载原始结果</a>
-        {mapping?.source_asset_id && (
-          <a href={`/api/assets/${mapping.source_asset_id}/content`}>查看输入/原片</a>
-        )}
-      </div>
       <details className="media-details">
-        <summary>来源与技术证据</summary>
+        <summary>来源、下载与时间映射</summary>
+        <p className="settings-note">
+          候选 {version.id.slice(0, 8)} · {version.source.target_snapshot.target.name} ·{" "}
+          {version.media.width} × {version.media.height} · {version.media.frame_count ?? "未知"} 帧
+          · 检查：{version.checks.status === "passed" ? "通过" : version.checks.status}
+        </p>
+
+        <p className="settings-note">
+          {mapping?.reason ?? "正在读取时间映射…"}
+          {mapping?.status === "known" && ` 原片时间 = 候选时间 + ${mapping.offset_seconds} 秒。`}
+        </p>
+
+        <div className="settings-actions">
+          <a href={`${url}?variant=original`}>下载原始结果</a>
+          {mapping?.source_asset_id && (
+            <a href={`/api/assets/${mapping.source_asset_id}/content`}>查看输入/原片</a>
+          )}
+        </div>
         <p>版本 {version.id}</p>
         <p>内容 SHA-256：{version.content_hash}</p>
         <p>最终图 SHA-256：{version.source.graph_hash}</p>
@@ -206,9 +201,12 @@ function ReviewPlayer({
   );
 }
 
-export function Versions() {
+export function Versions({ active = true }: { active?: boolean }) {
   const candidate = useRef<HTMLVideoElement>(null);
   const controllerRef = useRef<ReturnType<typeof createComparisonPlayback> | null>(null);
+  useEffect(() => {
+    if (!active) controllerRef.current?.pause();
+  }, [active]);
   const { snapshot, stale } = useWorkspace();
   const versions = snapshot?.data.versions ?? [];
   const [clip, setClip] = useState("");
@@ -251,11 +249,8 @@ export function Versions() {
     <section className="workspace settings" aria-labelledby="versions-title">
       <div className="section-heading">
         <h2 id="versions-title">逐段审片</h2>
-        <span>REVIEW DESK</span>
+        <span>选择片段与候选</span>
       </div>
-      <p className="settings-note">
-        每段完成检查后立即可审，无需等待其他生成。切换片段或候选由你决定。
-      </p>
       {stale && (
         <p role="alert" className="error">
           审片状态暂不可用，保留已有预览；正在重连。
@@ -269,7 +264,7 @@ export function Versions() {
           {item.error && ` · ${item.error.message}`}
         </p>
       ))}
-      {!selected && <p>等待首个可审版本。</p>}
+      {!selected && <p>等待首个可审版本。请让 Agent 准备素材并提交生成，可在任务页查看进度。</p>}
       <div className="review-desk">
         <nav className="review-clips" aria-label="审片片段">
           {Array.from(groups, ([key, items]) => (
@@ -311,7 +306,6 @@ export function Versions() {
               candidate={candidate}
               controllerRef={controllerRef}
             />
-            <Decisions version={selected} />
             <Feedback
               version={selected}
               video={candidate}
@@ -330,9 +324,7 @@ export function Versions() {
             />
           </div>
         )}
-        <Monitor />
       </div>
-      <ProductionActivity />
       <Delivery />
     </section>
   );

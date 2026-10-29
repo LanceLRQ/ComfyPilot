@@ -115,7 +115,7 @@ export function Maintenance() {
     <section className="workspace settings" aria-labelledby="maintenance-title">
       <div className="section-heading">
         <h2 id="maintenance-title">素材维护</h2>
-        <span>STORAGE</span>
+        <span>受管副本</span>
       </div>
       <p className="settings-note">
         仅检查本项目在所选 ComfyUI

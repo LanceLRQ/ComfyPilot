@@ -74,16 +74,25 @@ export function Decisions({ version }: { version: Version }) {
     }
   }
   return (
-    <section className="review-feedback" aria-labelledby="decision-title">
+    <section className="review-feedback review-decision" aria-labelledby="decision-title">
       <div className="section-heading">
         <h3 id="decision-title">审片决定</h3>
         <span>{adopted ? "用户已采用" : "候选 · 尚未采用"}</span>
       </div>
-      <p className="settings-note">技术检查和 Agent 评价供参考；正式交付只使用你明确采用的版本。</p>
       <div className="resource-actions">
         <button
           type="button"
+          className="action-link"
+          onClick={() => {
+            document.getElementById("feedback-title")?.scrollIntoView({ block: "start" });
+          }}
+        >
+          填写修改意见
+        </button>
+        <button
+          type="button"
           disabled={busy || stale || adopted || version.checks.status !== "passed"}
+          className="primary"
           onClick={() => void decide("adopt")}
         >
           通过并采用当前候选
@@ -93,22 +102,28 @@ export function Decisions({ version }: { version: Version }) {
         </button>
       </div>
       {message && <p role="status">{message}</p>}
-      {snapshot?.data.decisions
-        .filter((item) => item.version_id === version.id)
-        .slice(0, 5)
-        .map((item) => (
-          <p key={item.id} className="settings-note">
-            {item.decision === "adopt" ? "用户采用" : "用户拒绝"} · {item.source} ·{" "}
-            {item.user_statement}
-          </p>
-        ))}
-      {snapshot?.data.evaluations
-        .filter((item) => item.version_id === version.id)
-        .map((item) => (
-          <p key={item.id} className="settings-note">
-            Agent 技术评价：{item.text}
-          </p>
-        ))}
+      <details className="media-details">
+        <summary>采用规则与决定记录</summary>
+        <p className="settings-note">
+          技术检查和 Agent 评价供参考；正式交付只使用你明确采用的版本。
+        </p>
+        {snapshot?.data.decisions
+          .filter((item) => item.version_id === version.id)
+          .slice(0, 5)
+          .map((item) => (
+            <p key={item.id} className="settings-note">
+              {item.decision === "adopt" ? "用户采用" : "用户拒绝"} · {item.source} ·{" "}
+              {item.user_statement}
+            </p>
+          ))}
+        {snapshot?.data.evaluations
+          .filter((item) => item.version_id === version.id)
+          .map((item) => (
+            <p key={item.id} className="settings-note">
+              Agent 技术评价：{item.text}
+            </p>
+          ))}
+      </details>
     </section>
   );
 }

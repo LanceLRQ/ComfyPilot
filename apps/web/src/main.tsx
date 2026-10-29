@@ -3,6 +3,8 @@ import { createRoot } from "react-dom/client";
 import { z } from "zod";
 import { Assets } from "./Assets";
 import { Maintenance } from "./Maintenance";
+import { Monitor, ProductionSummary } from "./Monitor";
+import { ProductionActivity } from "./ProductionActivity";
 import { Resources } from "./Resources";
 import { Settings } from "./Settings";
 import { Versions } from "./Versions";
@@ -24,14 +26,21 @@ const projectSchema = z.object({
 });
 
 type Project = z.infer<typeof projectSchema>;
-const workerLabels = {
-  not_started: "等待启动",
-  running: "运行中",
-  stale: "心跳已过期",
-  stopped: "已停止",
-};
+const views = { review: "审片", tasks: "任务", assets: "素材", project: "项目" };
+type View = keyof typeof views;
 
 function App() {
+  const [view, setView] = useState<View>("review");
+  useEffect(() => {
+    function navigate() {
+      const value = window.location.hash.slice(1);
+      setView(value === "tasks" || value === "assets" || value === "project" ? value : "review");
+      window.scrollTo(0, 0);
+    }
+    navigate();
+    window.addEventListener("hashchange", navigate);
+    return () => window.removeEventListener("hashchange", navigate);
+  }, []);
   const [project, setProject] = useState<Project | null>(null);
   const [error, setError] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
@@ -62,151 +71,78 @@ function App() {
     };
   }, []);
 
-  const worker = project?.worker;
+  const local = project?.local_control === true;
+  const active = !local && (view === "assets" || view === "project") ? "review" : view;
   return (
     <div className="shell">
       <header className="topbar">
-        <a className="brand" href="/" aria-label="ComfyPilot 项目首页">
+        <a className="brand" href="#review" aria-label="ComfyPilot 审片首页">
           <span className="brand-mark" aria-hidden="true">
             ↗
           </span>
           <span>ComfyPilot</span>
         </a>
+        <span className="project-name">{project?.name ?? "正在读取项目"}</span>
         <span className="mode">
-          {project?.local_control === false ? "局域网审片" : "本机工作台"}
-          <span className="mode-dot" />
+          {local ? "本机工作台" : "局域网审片"} ·{" "}
+          {error ? "连接中断" : project ? "已连接" : "连接中"}
         </span>
       </header>
+      <nav className="view-nav" aria-label="工作台视图">
+        {Object.entries(views)
+          .filter(([key]) => local || key === "review" || key === "tasks")
+          .map(([key, label]) => (
+            <a key={key} href={`#${key}`} aria-current={active === key ? "page" : undefined}>
+              {label}
+            </a>
+          ))}
+      </nav>
       <main>
-        <div className="eyebrow">
-          <span>WORKSPACE</span>
-          <span>项目概览 / 01</span>
-        </div>
-        <section className="intro">
-          <div>
-            <p className="kicker">每一次创作，都从这里开始。</p>
-            <h1>
-              {project?.name ?? "正在读取项目"}
-              <span className="title-dot">.</span>
-            </h1>
-            <p className="intro-copy">
-              一个明确的工作目录，承载你与 Agent 的创作。
-              <br />
-              配置、资源和运行状态，都属于这个项目。
-            </p>
-          </div>
-          <div className={`connection ${error ? "unavailable" : ""}`} role="status">
-            <span className="status-light" />
-            <div>
-              <strong>
-                {error ? "服务连接中断" : project ? "项目服务已连接" : "正在连接本机服务"}
-              </strong>
-              <span className="connection-note">
-                {error
-                  ? "保留最后一次读取的数据"
-                  : project?.local_control === false
-                    ? "局域网审片 · 无需登录"
-                    : "回环连接 · 无需登录"}
-              </span>
-            </div>
-          </div>
-        </section>
+        <h1>{views[active]}</h1>
         {error && (
           <p className="error" role="alert">
-            暂时无法读取项目，请检查运行服务的终端。连接恢复后会自动更新。
+            项目连接中断，保留最后数据，正在重连。
           </p>
         )}
-        <section className="workspace" aria-labelledby="workspace-title">
-          <div className="section-heading">
-            <h2 id="workspace-title">当前工作目录</h2>
-            <span>PROJECT ROOT</span>
-          </div>
-          <div className="root-path">
-            {project?.local_control === false
-              ? "工作目录仅在本机显示"
-              : (project?.root ?? "等待项目数据…")}
-          </div>
-          <div className="project-details">
-            <div className="project-detail">
-              <span className="label">项目标识</span>
-              <code>{project?.project_id ?? "—"}</code>
-            </div>
-            <div className="project-detail">
-              <span className="label">创建时间</span>
-              <span className="detail-value">
-                {project
-                  ? new Date(project.created_at).toLocaleString("zh-CN", { hour12: false })
-                  : "—"}
-              </span>
-            </div>
-            <div className="project-detail">
-              <span className="label">数据格式</span>
-              <span className="detail-value">
-                {project ? `Schema ${project.schema_version}` : "—"}
-              </span>
-            </div>
-          </div>
-        </section>
-        <section className="lower-grid">
-          <article className="worker-card">
-            <div className="section-heading">
-              <h2>后台 Worker</h2>
-              <span>BACKGROUND PROCESS</span>
-            </div>
-            <div className="worker-state">
-              <span
-                className={`worker-orbit ${worker?.status === "running" && !error ? "active" : ""}`}
-                aria-hidden="true"
-              >
-                ◉
-              </span>
-              <div>
-                <strong>{worker ? workerLabels[worker.status] : "等待状态"}</strong>
-                <p>独立进程，定期保存项目心跳。</p>
-              </div>
-            </div>
-            <dl>
-              <div className="worker-detail">
-                <dt>进程 PID</dt>
-                <dd>{worker?.pid ?? "—"}</dd>
-              </div>
-              <div className="worker-detail">
-                <dt>最近心跳</dt>
-                <dd>
-                  {worker?.last_seen_at
-                    ? new Date(worker.last_seen_at).toLocaleTimeString("zh-CN", { hour12: false })
-                    : "—"}
-                </dd>
-              </div>
-            </dl>
-          </article>
-          <article className="next-card">
-            <span className="eyebrow">从项目开始，逐步创作</span>
-            <h2>
-              给协作一个
-              <br />
-              <em>确定的位置。</em>
-            </h2>
-            <p>已支持视频生成、自动收片与实时预览。你与 Agent 可以继续调整创作。</p>
-            <span className="stage">当前阶段：实时审片</span>
-          </article>
-        </section>
-        {project?.local_control && (
+        <ProductionSummary />
+        <div hidden={active !== "review"}>
+          <Versions active={active === "review"} />
+        </div>
+        <div hidden={active !== "tasks"} className="workspace settings task-view">
+          <ProductionActivity />
+          <Monitor />
+        </div>
+        {local && (
           <>
-            <Settings />
-            <Resources />
-            <Assets />
+            <div hidden={active !== "assets"}>
+              <Assets />
+            </div>
+            <div hidden={active !== "project"}>
+              <details className="project-context">
+                <summary>项目目录与服务信息</summary>
+                <p className="root-path">{project.root}</p>
+                <p>
+                  项目标识：<code>{project.project_id}</code>
+                </p>
+                <p>
+                  数据格式：Schema {project.schema_version} · Worker：{project.worker.status} ·
+                  PID：{project.worker.pid ?? "—"}
+                </p>
+                <p>
+                  创建于 {new Date(project.created_at).toLocaleString("zh-CN", { hour12: false })}
+                </p>
+              </details>
+              <Settings />
+              <Resources />
+              <Maintenance />
+            </div>
           </>
         )}
-        <Versions />
-        {project?.local_control && <Maintenance />}
         <footer>
           <span>
-            {project?.local_control === false
-              ? "LAN 审片 · 管理操作请使用本机 Agent"
-              : "本机控制 · 所有项目数据保存在当前目录"}
+            {local ? "本机管理 · 数据保存在当前项目目录" : "局域网审片 · 管理操作请使用本机 Agent"}
           </span>
-          <span>{updatedAt ? `更新于 ${updatedAt} · 每 5 秒刷新` : "正在读取…"}</span>
+          <span>{updatedAt ? `项目连接更新于 ${updatedAt}` : "正在读取…"}</span>
         </footer>
       </main>
     </div>

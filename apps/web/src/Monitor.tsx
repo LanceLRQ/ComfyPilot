@@ -71,7 +71,7 @@ export function Monitor() {
           状态读取或探测失败，保留的快照可能已过期，请等待重连。
         </p>
       )}
-      <details open>
+      <details>
         <summary>平台与 Worker</summary>
         <p className="settings-note">
           Worker {stale ? "连接中断，快照已过期" : (monitoring?.worker.status ?? "未知")} · PID{" "}
@@ -93,7 +93,7 @@ export function Monitor() {
           </p>
         ))}
       </details>
-      <details open>
+      <details>
         <summary>活动运行与收片</summary>
         {snapshot?.data.runs
           .filter((run) =>
@@ -128,7 +128,7 @@ export function Monitor() {
         <p className="settings-note">尚未配置执行端，请先在项目设置中添加。</p>
       )}
       {monitoring?.targets.map((item) => (
-        <details className="target-editor" key={item.target_id} open>
+        <details className="target-editor" key={item.target_id}>
           <summary>执行端 {item.target_id}</summary>
           <div className="section-heading">
             <h3>
@@ -204,5 +204,43 @@ export function Monitor() {
         </details>
       ))}
     </aside>
+  );
+}
+
+export function ProductionSummary() {
+  const { snapshot, stale } = useWorkspace();
+  const data = snapshot?.data;
+  const generating =
+    data?.runs.filter((run) =>
+      ["dispatching", "submitted", "running", "reconciling"].includes(run.status),
+    ).length ?? 0;
+  const collecting = data?.runs.filter((run) => run.status === "collecting").length ?? 0;
+  const pending =
+    data?.versions.filter(
+      (version) =>
+        version.ready && !data.decisions.some((decision) => decision.version_id === version.id),
+    ).length ?? 0;
+  const changes =
+    data?.feedback.filter((item) => item.kind === "needs_changes" && item.status !== "verified")
+      .length ?? 0;
+  return (
+    <section className="production-summary" aria-label="生产摘要">
+      <p>
+        {!data ? "正在读取生产状态…" : stale ? "生产连接中断，以下为最后快照" : "生产状态已连接"}
+      </p>
+      {data && (
+        <>
+          <p>
+            生成 {generating} · 收片 {collecting} · 待审 {pending} · 待复核意见 {changes}
+          </p>
+          <p>
+            {data.dispatch.manual_pause ? "后续派发已暂停" : "后续派发开关已打开"}
+            {data.dispatch.review_hold && " · 等待审片处理"}
+            {data.dispatch.reconciliation_required && " · 存在待核对提交"}
+          </p>
+          <a href="#tasks">查看任务与监控详情</a>
+        </>
+      )}
+    </section>
   );
 }

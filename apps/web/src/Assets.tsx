@@ -169,7 +169,7 @@ export function Assets() {
     <section className="workspace settings" aria-labelledby="assets-title">
       <div className="section-heading">
         <h2 id="assets-title">素材与显式片段</h2>
-        <span>LOCAL MEDIA</span>
+        <span>项目素材</span>
       </div>
       <p className="settings-note">
         原片与参考图保存在当前项目。提取前明确指定起止时间；工作片无音轨，原片保持原样。
