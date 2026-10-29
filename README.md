@@ -161,13 +161,14 @@ make package
 | [H3 真实链路验收](docs/h3-validation.md) | 两种部署、重启接续、收片恢复、技术检查及证据复核 |
 | [M3 审片协作联合验收](docs/m3-validation.md) | 真实 GPU 并行审阅、离线反馈、Agent 返工、用户采用和监控恢复 |
 | [素材导入与显式片段](docs/media-assets.md) | 网页/MCP 操作、任务状态、限额、时间映射和失败处理 |
+| [双宿主补验](docs/host-validation.md) | Claude Code/Codex 自动发现、默认待机、项目隔离与宿主审批边界 |
 | [Agent 接入与 M1 验收](docs/agent-setup.md) | Skill 安装、双宿主注册、实际操作与待实测矩阵 |
 | [产品需求](docs/product-requirements.md) | 已确认约束、协作流程、模块划分与产品规则 |
 | [首版范围与验收](docs/mvp-scope.md) | 第一版功能边界、40 条验收要求与开发顺序 |
 | [架构设计](docs/architecture.md) | 项目目录、进程生命周期、模块契约、执行恢复与素材清理 |
 | [技术调研与分期](docs/research-and-roadmap.md) | 官方方案参考、简化画布设计、分期与仍需实测的问题 |
 
-范围以首版范围与验收为准。当前开发构建可继续内部试用；[40 条证据矩阵](docs/m4-validation.md)中 36 条在记录范围通过、4 条保留，正式发布阻断。生产桥接升级及受限清理、[大文件收片压力](docs/collection-pressure.md)已补验；完整宿主、全新安装/回退与独立执行端继续复核。
+范围以首版范围与验收为准。当前开发构建可继续内部试用；[40 条证据矩阵](docs/m4-validation.md)中 36 条在记录范围通过、4 条保留，正式发布阻断。生产桥接升级及受限清理、[大文件收片压力](docs/collection-pressure.md)已补验；双宿主非交互流程已补验；交互式信任/批准/退出、全新安装/回退与独立执行端继续复核。
 
 ## 第一版
 

@@ -32,7 +32,7 @@ distribution-path 仅读取路径，不建项目、不联网。安装版目录�
 | 媒体工具 | 平台 PATH 需要 FFmpeg/ffprobe，视频处理需 libx264；macOS FFmpeg 8.1.1、Linux FFmpeg 6.1.1 已验，缺项有阻塞原因；H.264 MP4 为浏览器基准 |
 | ComfyUI / 生成配方 | 已验 ComfyUI 0.38.0 / RTX 3090 的 H3 人物替换；模型、节点与固定依赖见 h3-recipe.md，生成证据见 h3-validation.md；不是任意节点/工作流兼容声明 |
 | 素材桥接 | protocol=1；upload/download/stat/known 为传输基线；清理另需 delete。2026-10-29 已完成既有生产桥接升级、原容器重启和两新项目受限删除；原件与既有媒体哈希保持，详见 remote-assets.md |
-| 宿主 | Codex 0.164.0、Claude Code 2.1.302 接入格式与部分真实 Claude/GLM-5.3 场景已验；双宿主自动发现、权限、目录选择及退出完整矩阵继续保留 |
+| 宿主 | Codex 0.164.0、Claude Code 2.1.302 / GLM-5.3 的 macOS 双宿主非交互发现、待机、目录、连接与生命周期已补验；首次信任/人工批准、交互式退出及 Linux 真实双宿主路径保留，见 agent-setup.md |
 | 本机与远程 | 两种部署已完成真实生成/收片；当前两具名执行端同一 GPU 地址，独立 ComfyUI 实例切换仍保留 |
 
 FFmpeg 版本以验收记录为准，系统工具不由 Python lock 安装。GPU 温度/利用率、CPU/远端磁盘、完整日志或环境管理没有采集/管理通道时为 unsupported。标准 HTTP 不保证通用视频传输或物理清理；[远程桥接](remote-assets.md)只通过用户已指定通道安装，不自动降级 SSH。平台只读项目资源，不导入自定义节点源码。
