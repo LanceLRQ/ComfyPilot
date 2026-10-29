@@ -10,7 +10,7 @@
 | --- | --- |
 | recipe.yaml | 输入、参数、模型、输出绑定 |
 | api.json | 18 节点、17 种核心节点的执行图模板；以此为预检和冻结依据 |
-| canvas.json | 对应基础链路的可视画布，去除项目私有素材与说明；尚未验证当前前端导入/再导出往返 |
+| canvas.json | 对应基础链路的可视画布；前端 1.53.6 实际往返通过，API 导出须清理下述 UI 预览字段 |
 | upstream-r2v.json | 未修改的官方 R2V 模板原件，包含额外分支，不作为此配方执行图 |
 | environment.lock.json | 核心提交、节点类型、模型修订/大小/哈希、环境参照与验收边界 |
 | target-evidence.example.json | 单目标环境证据模板，不能当作安装成功回执 |
@@ -89,10 +89,10 @@ git -C "$CP_COMFY_ROOT" checkout --detach 6b747c0428c343e1417219641db93a4fb7cb69
 git -C "$CP_COMFY_ROOT" rev-parse HEAD
 ```
 
-Python/PyTorch 依赖以固定核心的 requirements.txt 为基线，GPU wheel 按目标驱动选择；INT8 convrot 参照模型卡使用 cu130。观察到的运行环境为 Python 3.13.15 / PyTorch 2.13.0+cu130；这是 HTTP 自报环境参照，不是已在本项目重装复现的依赖锁。不要把 requirements 安装成功等同于模型可运行，保存目标解析后的完整 freeze 与驱动版本后再生成验证。
+Python/PyTorch 依赖以固定核心的 requirements.txt 为基线，GPU wheel 按目标驱动选择；INT8 convrot 参照模型卡使用 cu130。观察到的运行环境为 Python 3.13.15 / PyTorch 2.13.0+cu130；该 Python/PyTorch 组合已在独立空白 venv 重新安装验证；新环境另为 PyAV 19.0.2 / aiohttp 3.14.5，完整 freeze 另存目标证据，不能把这些参照当作所有目标的依赖锁。不要把 requirements 安装成功等同于模型可运行，保存目标解析后的完整 freeze 与驱动版本后再生成验证。
 
 6. 模型按锁文件的固定 URL 下载到新文件，逐项比对大小和 SHA-256 后放入上述目标目录；路径映射也可用现有 extra_model_paths，必须记录实际文件位置。保留旧文件，不按同名直接覆盖。权重无需进入创作项目资源目录或 Git。
-7. 素材预处理环境需要 `ffmpeg` / `ffprobe`、libx264、缩放/补边/fps 滤镜；当前本机工具为 8.1.1。目标若承担预处理也需相同能力。核心 LoadVideo/SaveVideo 采用 PyAV，检查目标 `import av` 与 H.264 编码能力，不能用本机 ffmpeg 版本替代目标证据。目标命令行 FFmpeg、PyAV/编码器及驱动尚待管理通道核验。
+7. 素材预处理环境需要 `ffmpeg` / `ffprobe`、libx264、缩放/补边/fps 滤镜；当前本机工具为 8.1.1。目标若承担预处理也需相同能力。核心 LoadVideo/SaveVideo 采用 PyAV，检查目标 `import av` 与 H.264 编码能力，不能用本机 ffmpeg 版本替代目标证据。2026-10-29 独立目标已通过管理通道核验 FFmpeg/ffprobe 7.1.5、PyAV 19.0.2 / libx264 和 CUDA 实际运算；新目标仍需分别记录。
 8. 核心或依赖变更需要重启目标 ComfyUI。再次确认队列为空，按其原启动方式只重启该实例；不要改变另一目标或平台生命周期。保留原命令、venv/镜像和日志。只加模型时按实例支持的方式刷新模型清单，无效时按同样停机流程重启。
 
 ## 安装后的验证与回退
@@ -101,7 +101,7 @@ Python/PyTorch 依赖以固定核心的 requirements.txt 为基线，GPU wheel �
 
 1. 目标终端：Git SHA/dirty、解释器和包版本、`pip check`、`import torch, av`、CUDA 可用性、四个权重实际 SHA-256、FFmpeg/ffprobe/编码器。`environment.lock.json` 内列的是上游期望值，不是目标实测回执。
 2. 平台：显式 `refresh_resources`，选择该配方；`probe_target(target_id)` 后立即 `preflight_recipe(recipe_id,target_id)`。预检有效期 15 秒，过期重探测。失败逐项报告缺节点、缺模型、无效绑定或 unknown；缺项不得通过切换另一执行端来掩盖。
-3. 画布：在目标实际前端导入 canvas.json，检查动态参考端口与 SaveVideo 参数，保存/导出新的 API 图后对照 api.json。当前画布往返未实测，默认执行依据仍为独立 API 图。上游原件包含其他分支，不能直接顶替本配方。
+3. 画布：在目标实际前端导入 canvas.json，检查动态参考端口与 SaveVideo 参数，保存/导出新的 API 图后对照 api.json。前端 1.53.6 实际往返保留 18 个节点和 22 条连线，预览就绪后两次 API 导出一致。该前端会导出 schema 未定义的 LoadVideo.inputs.video-preview；保留画布原件，仅删除这一已确认的 UI 字段后重做目标预检，不静默过滤其他未知字段。CreateVideo 与 SaveVideo 补入的默认值需对照目标 schema；默认执行依据仍为独立 API 图。上游原件包含其他分支，不能直接顶替本配方。
 4. 完整链路：M2/2.9 用用户授权的普通测试人物素材，经平台最终图提交，记录 prompt_id、最终图/素材哈希、节点日志、history 文件、原片偏移、模型/环境证据与输出 ffprobe；核对 124 帧、24 fps、768×448 和音频来源，再审查视觉质量。当前不使用 `/prompt` 充当只校验接口，不绕过平台先跑生成。
 
 `resource_preflights` 按 **recipe_hash + target_id** 保存标准预检证据；实例、Worker、配置或目录失效后标 stale。一个目标通过不会修改另一目标的状态。receipt.json 只写对应 target_id 的环境记录，状态分为 expected / verified / unknown；不含 SSH 密钥、令牌、完整启动 argv 或用户素材文件列表。当前平台不把手写 receipt 自动当作安装状态。
@@ -112,4 +112,4 @@ Python/PyTorch 依赖以固定核心的 requirements.txt 为基线，GPU wheel �
 
 节点参数依据固定核心的 [H3 实现](https://github.com/Comfy-Org/ComfyUI/blob/6b747c0428c343e1417219641db93a4fb7cb69ae/comfy_extras/nodes_minimax_h3.py)、[V3 输入展开](https://github.com/Comfy-Org/ComfyUI/blob/6b747c0428c343e1417219641db93a4fb7cb69ae/comfy_api/latest/_io.py)、[视频保存](https://github.com/Comfy-Org/ComfyUI/blob/6b747c0428c343e1417219641db93a4fb7cb69ae/comfy_extras/nodes_video.py)、[PreviewVideo 输出](https://github.com/Comfy-Org/ComfyUI/blob/6b747c0428c343e1417219641db93a4fb7cb69ae/comfy_api/latest/_ui.py)与[官方教程](https://docs.comfy.org/tutorials/video/minimax/minimax-h3)。
 
-实测范围与结果见公开 `docs/h3-validation.md`、`docs/h3-recipe.md` 和 `docs/agent-setup.md`。新增目标仍须单独验证依赖、哈希和生成能力，不能借用其他目标的结果。模型/核心全新安装与回退、画布往返、双宿主完整矩阵及用户视觉/音频质量验收继续保留；技术检查通过不代表用户采用。
+实测范围与结果见公开 `docs/h3-validation.md`、`docs/h3-recipe.md` 和 `docs/agent-setup.md`。新增目标仍须单独验证依赖、哈希和生成能力，不能借用其他目标的结果。独立新核心/venv 安装、缺节点恢复、安装/启动失败回退和画布往返见 docs/h3-install-validation.md。模型按用户要求只读共享并逐项校验，从零下载权重及下载失败恢复、双宿主完整矩阵和用户视觉/音频质量验收继续保留；技术检查通过不代表用户采用。

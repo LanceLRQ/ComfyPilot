@@ -99,7 +99,9 @@ def test_builtin_h3_graph_binds_media_parameters_and_output_without_uploading(h3
     assert all(method == "GET" for method, _ in calls)
 
 
-@pytest.mark.parametrize("defect", ["autogrow", "branch", "required", "enum", "range", "media"])
+@pytest.mark.parametrize(
+    "defect", ["autogrow", "branch", "required", "enum", "range", "preview", "media"]
+)
 def test_h3_v3_schema_rejects_invalid_flat_inputs_and_selected_branches(h3, defect):
     project, instance, frozen, _ = h3
     graph = frozen["graph"]
@@ -113,6 +115,8 @@ def test_h3_v3_schema_rejects_invalid_flat_inputs_and_selected_branches(h3, defe
         graph["136"]["inputs"]["ref_image_size"] = "unsupported"
     elif defect == "range":
         graph["136"]["inputs"]["width"] = 16
+    elif defect == "preview":
+        graph["200"]["inputs"]["video-preview"] = ""
     else:
         # 未声明为媒体上传槽位的枚举不能忽略选项校验。
         target = get_target_status(project, instance, os.getpid(), "ready")
@@ -122,6 +126,8 @@ def test_h3_v3_schema_rejects_invalid_flat_inputs_and_selected_branches(h3, defe
     report = check_frozen_recipe(frozen, get_target_status(project, instance, os.getpid(), "ready"))
     assert report["status"] == "invalid", report
     assert report["errors"]
+    if defect == "preview":
+        assert any("200.video-preview" in error for error in report["errors"])
 
 
 def test_h3_nested_branch_requires_only_active_fields(h3):
