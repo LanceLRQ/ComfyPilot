@@ -327,6 +327,12 @@ Web 使用四个 hash 视图，默认 review，另有 tasks、assets、project�
 
 SidePanel 复用原生 dialog：反馈在宽度至少 1200 px 时通过 show 与舞台并排，较窄时通过 showModal 展示；RunDrawer 始终为模态抽屉。原生模态提供背景 inert，组件处理 Tab/Shift+Tab 循环、Esc、初始焦点与返回入口；断点切换保留同一内容 DOM。Feedback 常驻于面板内，沿用按版本索引的草稿与原命令；开关不卸载或重挂播放器。运行选择提升至 App，从候选/任务条目打开，切视图关闭抽屉；摘要复用 WorkspaceProvider，完整证据仅本机按按钮 GET 既有 evidence 接口，关闭中止未完成读取，不增加轮询或写命令。
 
+Versions 在原 section 上进入专注布局并请求 requestFullscreen，不使用 portal、不重建视频或控制器；反馈 dialog 保持为全屏根的后代。fullscreenchange 同步退出状态，专注期间暂存并设置祖先各层兄弟节点 inert、冻结页面滚动，清理时逐项恢复并返回入口焦点。拒绝或无 API 时保留页面专注并提示，文档级 Esc 监听仅在专注期间注册，尊重反馈面板已处理的按键。切页退出并暂停；运行详情先退出再交由 App 打开，避免抽屉位于全屏根之外不可见。
+
+Maintenance 读取 prepare/inspect 原响应中的项目、target_snapshot、user_instruction 与固定 items；SidePanel 的 confirmation 样式居中且初始聚焦取消。打开/关闭确认不调用 execute，勾选后沿用原 execute 用例和命令 ID。explicit failed 重试用新命令 ID，同清单；不确定回执时复用原命令。active 约束关闭跨页确认；stale 禁用执行。服务端、MCP、数据库结构和清理复核流程均不新增协议。
+
+行距调整限定在面板正文、运行字段、候选说明与时间轴，采用无单位 1.6 行高随字号计算；时间轴文字 grid gap 为 4 px，维护字段/操作与确认区用 16 px 间距。不整体放大播放控制或主导航，避免手机首屏操作被挤出；确认勾选显式横向排列，危险按钮样式具备足够优先级，不被普通表单按钮覆盖。
+
 手机单路/双路仅通过 CSS 切换可见性，两路 video 保持挂载并复用 comparison 控制器；宽屏始终双路。候选选择器使用可收起的缩略图列表，沿用原版本选择与草稿索引。ReviewTimeline 从同一 WorkspaceProvider 快照过滤当前版本反馈，以候选秒数和共同比对时长绘制点、区间与游标；定位先 pause 再 seek，复用现有反馈面板，不引入写命令或 original_range 推算。
 
 `GET /api/assets/{id}/poster` 与 `GET /api/versions/{id}/poster?view=candidate|source` 按需读取受管素材/播放代理；source 复用已核实的映射偏移，未知映射取输入片段起点。服务端先校验登记 ID 与原路径，再用 FFmpeg 本地协议/格式白名单生成最长 480×270 的 JPEG，15 秒超时，单实例串行解码。缓存位于项目 `.comfypilot/cache/posters/`，按内容文件名与偏移标识；临时目录退出时清理，成功后原子替换。缓存不登记为候选、不修改源文件或业务修订；LAN 只读白名单允许预览，不开放管理。返回私有缓存与 nosniff，失败沿用结构化错误，前端保留媒体和业务入口。

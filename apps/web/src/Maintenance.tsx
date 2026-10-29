@@ -1,10 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { z } from "zod";
+import { SidePanel } from "./SidePanel";
 import { randomUUID } from "./uuid";
 import { useWorkspace } from "./Workspace";
 
 const planSchema = z.object({
   id: z.string().optional(),
+  project_id: z.string(),
+  target_snapshot: z.object({
+    target: z.object({ id: z.string(), name: z.string(), base_url: z.string() }),
+  }),
+  user_instruction: z.string().optional(),
   estimated_bytes: z.number(),
   reference_revision: z.number(),
   items: z.array(
@@ -47,7 +53,7 @@ const reasons: Record<string, string> = {
   fingerprint_changed: "执行端文件发生变化",
 };
 
-export function Maintenance() {
+export function Maintenance({ active = true }: { active?: boolean }) {
   const { snapshot, stale } = useWorkspace();
   const [target, setTarget] = useState("");
   const [instruction, setInstruction] = useState("");
@@ -57,6 +63,11 @@ export function Maintenance() {
   const [busy, setBusy] = useState(false);
   const [command, setCommand] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<z.infer<typeof receiptSchema>["data"]>();
+  const [confirmation, setConfirmation] = useState<"execute" | "retry" | null>(null);
+  const [acknowledged, setAcknowledged] = useState(false);
+  useEffect(() => {
+    if (!active) setConfirmation(null);
+  }, [active]);
   async function inspect(save: boolean) {
     if (!snapshot || !target) return;
     setBusy(true);
@@ -112,7 +123,7 @@ export function Maintenance() {
     }
   }
   return (
-    <section className="workspace settings" aria-labelledby="maintenance-title">
+    <section className="workspace settings asset-maintenance" aria-labelledby="maintenance-title">
       <div className="section-heading">
         <h2 id="maintenance-title">素材维护</h2>
         <span>受管副本</span>
@@ -170,8 +181,12 @@ export function Maintenance() {
         </button>
         <button
           type="button"
-          disabled={busy || stale || !preview?.id || !!receipt}
-          onClick={() => void execute()}
+          disabled={busy || stale || !preview?.id || !!receipt || !preview.estimated_bytes}
+          aria-haspopup="dialog"
+          onClick={() => {
+            setAcknowledged(false);
+            setConfirmation("execute");
+          }}
         >
           执行此清单
         </button>
@@ -179,7 +194,11 @@ export function Maintenance() {
           <button
             type="button"
             disabled={busy || stale || !preview?.id}
-            onClick={() => void execute(true)}
+            aria-haspopup="dialog"
+            onClick={() => {
+              setAcknowledged(false);
+              setConfirmation("retry");
+            }}
           >
             按原清单重试
           </button>
@@ -245,6 +264,98 @@ export function Maintenance() {
           </ul>
         </div>
       )}
+      <SidePanel
+        id="cleanup-confirmation"
+        title={confirmation === "retry" ? "确认按原清单重试" : "确认清理执行端副本"}
+        open={active && confirmation !== null && !!preview?.id}
+        confirmation
+        onClose={() => setConfirmation(null)}
+      >
+        {preview?.id && (
+          <>
+            <p>
+              将直接删除所列执行端的受管副本，无法撤销。本项目正式素材、作品、反馈与采用记录保留。
+            </p>
+            <dl className="run-fields">
+              <div>
+                <dt>执行端</dt>
+                <dd>
+                  {preview.target_snapshot.target.name} · {preview.target_snapshot.target.id}
+                  <br />
+                  {preview.target_snapshot.target.base_url}
+                </dd>
+              </div>
+              <div>
+                <dt>固定范围</dt>
+                <dd>{preview.user_instruction}</dd>
+              </div>
+              <div>
+                <dt>预计删除</dt>
+                <dd>
+                  {preview.items.filter((item) => item.eligible).length} 个副本 ·{" "}
+                  {preview.estimated_bytes.toLocaleString()} 字节
+                </dd>
+              </div>
+              <div>
+                <dt>清单内保护</dt>
+                <dd>{preview.items.filter((item) => !item.eligible).length} 个，执行时再次复核</dd>
+              </div>
+            </dl>
+            <details>
+              <summary>核对固定清单与项目</summary>
+              <p>项目：{preview.project_id}</p>
+              <p>清单：{preview.id}</p>
+              <p>引用修订：{preview.reference_revision}</p>
+              <ul>
+                {preview.items.map((item) => (
+                  <li key={item.replica_id}>
+                    {item.role === "input" ? "输入" : "输出"} · {item.relative_path} ·{" "}
+                    {item.size.toLocaleString()} 字节 ·{" "}
+                    {item.eligible
+                      ? "预览时可清理"
+                      : item.protection_reasons
+                          .map((reason) => reasons[reason] ?? "文件状态需复核")
+                          .join("、")}
+                  </li>
+                ))}
+              </ul>
+            </details>
+            <p className="settings-note">
+              范围来自已保存清单，执行时重新核对引用与指纹；状态变化可能跳过文件。
+              {confirmation === "retry"
+                ? "重试使用新命令 ID，仍只执行同一清单。"
+                : command
+                  ? "已有命令 ID，将复用它核对原回执，不重复扩大删除。"
+                  : "取消或关闭不会发送删除请求。"}
+            </p>
+            <label className="cleanup-acknowledgement">
+              <input
+                type="checkbox"
+                checked={acknowledged}
+                onChange={(event) => setAcknowledged(event.target.checked)}
+              />
+              我已核对执行端与范围，确认删除这些执行端副本
+            </label>
+            {stale && <p role="alert">项目状态已断连，请恢复连接后再确认。</p>}
+            <div className="settings-actions">
+              <button type="button" data-cancel onClick={() => setConfirmation(null)}>
+                取消
+              </button>
+              <button
+                type="button"
+                className="destructive"
+                disabled={busy || stale || !acknowledged}
+                onClick={() => {
+                  setConfirmation(null);
+                  void execute(confirmation === "retry");
+                }}
+              >
+                {confirmation === "retry" ? "确认重试原清单" : "确认删除副本"}
+              </button>
+            </div>
+          </>
+        )}
+      </SidePanel>
     </section>
   );
 }

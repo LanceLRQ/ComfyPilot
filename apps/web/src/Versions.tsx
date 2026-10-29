@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { createComparisonPlayback, type PlaybackState } from "./comparison";
 import { Decisions, Delivery } from "./Decisions";
@@ -259,17 +259,78 @@ export function Versions({
   active?: boolean;
   onOpenRun: (id: string) => void;
 }) {
+  const focusRoot = useRef<HTMLElement>(null);
+  const focusButton = useRef<HTMLButtonElement>(null);
+  const [focused, setFocused] = useState(false);
+  const [focusMessage, setFocusMessage] = useState("");
   const candidate = useRef<HTMLVideoElement>(null);
   const controllerRef = useRef<ReturnType<typeof createComparisonPlayback> | null>(null);
   useEffect(() => {
-    if (!active) controllerRef.current?.pause();
+    if (!active) {
+      controllerRef.current?.pause();
+      setFocused(false);
+      if (document.fullscreenElement === focusRoot.current)
+        void document.exitFullscreen().catch(() => setFocusMessage("请使用浏览器退出全屏。"));
+    }
   }, [active]);
+  useEffect(() => {
+    const root = focusRoot.current;
+    if (!focused || !root) return;
+    const overflow = document.body.style.overflow;
+    const { scrollX, scrollY } = window;
+    const blocked: { element: HTMLElement; inert: boolean }[] = [];
+    for (let node: HTMLElement | null = root; node?.parentElement; node = node.parentElement) {
+      for (const sibling of node.parentElement.children) {
+        if (sibling !== node && sibling instanceof HTMLElement) {
+          blocked.push({ element: sibling, inert: sibling.inert });
+          sibling.inert = true;
+        }
+      }
+      if (node.parentElement === document.body) break;
+    }
+    document.body.style.overflow = "hidden";
+    function changed() {
+      if (document.fullscreenElement !== root) setFocused(false);
+    }
+    document.addEventListener("fullscreenchange", changed);
+    return () => {
+      document.removeEventListener("fullscreenchange", changed);
+      document.body.style.overflow = overflow;
+      for (const item of blocked) item.element.inert = item.inert;
+      window.scrollTo(scrollX, scrollY);
+      focusButton.current?.focus({ preventScroll: true });
+    };
+  }, [focused]);
+  function enterFocus() {
+    setFocused(true);
+    setFocusMessage("");
+    if (focusRoot.current?.requestFullscreen)
+      void focusRoot.current
+        .requestFullscreen()
+        .catch(() => setFocusMessage("浏览器未允许系统全屏，已使用页面专注模式。"));
+    else setFocusMessage("浏览器不支持系统全屏，已使用页面专注模式。");
+  }
+  const exitFocus = useCallback(async () => {
+    if (document.fullscreenElement === focusRoot.current) await document.exitFullscreen();
+    setFocused(false);
+  }, []);
   const { snapshot, stale } = useWorkspace();
   const versions = snapshot?.data.versions ?? [];
   const [clip, setClip] = useState("");
   const [choices, setChoices] = useState<Record<string, string>>({});
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  useEffect(() => {
+    if (!focused) return;
+    function dismiss(event: KeyboardEvent) {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      event.preventDefault();
+      if (feedbackOpen) setFeedbackOpen(false);
+      else void exitFocus().catch(() => setFocusMessage("请使用浏览器退出全屏。"));
+    }
+    document.addEventListener("keydown", dismiss);
+    return () => document.removeEventListener("keydown", dismiss);
+  }, [focused, feedbackOpen, exitFocus]);
   const groups = new Map<string, Version[]>();
   for (const version of versions.filter((item) => item.ready)) {
     const key = clipKey(version);
@@ -305,11 +366,17 @@ export function Versions({
     failed: "检查失败",
   };
   return (
-    <section className="workspace settings review-workbench" aria-labelledby="versions-title">
+    <section
+      ref={focusRoot}
+      className="workspace settings review-workbench"
+      data-focus={focused}
+      aria-labelledby="versions-title"
+    >
       <div className="section-heading">
         <h2 id="versions-title">逐段审片</h2>
         <span>选择片段与候选</span>
       </div>
+      {focusMessage && <p role="status">{focusMessage}</p>}
       {stale && (
         <p role="alert" className="error">
           审片状态暂不可用，保留已有预览；正在重连。
@@ -343,70 +410,88 @@ export function Versions({
         </nav>
         {selected && (
           <div className="review-stage">
-            <details
-              className="candidate-picker"
-              open={pickerOpen}
-              onToggle={(event) => setPickerOpen(event.currentTarget.open)}
-            >
-              <summary>
-                审阅候选 · {selected.id.slice(0, 8)} · {candidates.length} 个候选
-              </summary>
-              <fieldset className="candidate-list" aria-label="候选缩略图">
-                {[...candidates].reverse().map((item, index) => {
-                  const adopted = snapshot?.data.adoptions.some(
-                    (entry) => entry.version_id === item.id,
-                  );
-                  const pending =
-                    snapshot?.data.feedback.filter(
-                      (entry) =>
-                        entry.version_id === item.id &&
-                        entry.kind === "needs_changes" &&
-                        entry.status !== "verified",
-                    ).length ?? 0;
-                  const rejected =
-                    snapshot?.data.decisions.find((entry) => entry.version_id === item.id)
-                      ?.decision === "reject";
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      aria-label={`审阅候选 ${item.id.slice(0, 8)}`}
-                      aria-pressed={selected.id === item.id}
-                      onClick={() => {
-                        setChoices((previous) => ({ ...previous, [activeClip]: item.id }));
-                        if (window.matchMedia("(max-width: 800px)").matches) setPickerOpen(false);
-                      }}
-                    >
-                      <span className="candidate-image">
-                        <img
-                          loading="lazy"
-                          src={`/api/versions/${item.id}/poster`}
-                          alt=""
-                          onError={(event) => {
-                            event.currentTarget.hidden = true;
-                          }}
-                        />
-                        <span>预览不可用</span>
-                      </span>
-                      <span className="candidate-caption">
-                        <strong>
-                          候选 {index + 1} · {item.id.slice(0, 8)}
-                        </strong>
-                        <span>
-                          {new Date(item.created_at).toLocaleTimeString("zh-CN", { hour12: false })}{" "}
-                          · {item.source.target_snapshot.target.name}
+            <div className="candidate-tools">
+              <details
+                className="candidate-picker"
+                open={pickerOpen}
+                onToggle={(event) => setPickerOpen(event.currentTarget.open)}
+              >
+                <summary>
+                  审阅候选 · {selected.id.slice(0, 8)} · {candidates.length} 个候选
+                </summary>
+                <fieldset className="candidate-list" aria-label="候选缩略图">
+                  {[...candidates].reverse().map((item, index) => {
+                    const adopted = snapshot?.data.adoptions.some(
+                      (entry) => entry.version_id === item.id,
+                    );
+                    const pending =
+                      snapshot?.data.feedback.filter(
+                        (entry) =>
+                          entry.version_id === item.id &&
+                          entry.kind === "needs_changes" &&
+                          entry.status !== "verified",
+                      ).length ?? 0;
+                    const rejected =
+                      snapshot?.data.decisions.find((entry) => entry.version_id === item.id)
+                        ?.decision === "reject";
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        aria-label={`审阅候选 ${item.id.slice(0, 8)}`}
+                        aria-pressed={selected.id === item.id}
+                        onClick={() => {
+                          setChoices((previous) => ({ ...previous, [activeClip]: item.id }));
+                          if (window.matchMedia("(max-width: 800px)").matches) setPickerOpen(false);
+                        }}
+                      >
+                        <span className="candidate-image">
+                          <img
+                            loading="lazy"
+                            src={`/api/versions/${item.id}/poster`}
+                            alt=""
+                            onError={(event) => {
+                              event.currentTarget.hidden = true;
+                            }}
+                          />
+                          <span>预览不可用</span>
                         </span>
-                        <small>
-                          检查{item.checks.status === "passed" ? "通过" : item.checks.status} ·{" "}
-                          {adopted ? "用户已采用" : rejected ? "用户已拒绝" : "尚未采用"}
-                          {pending ? ` · ${pending} 条待复核` : ""}
-                        </small>
-                      </span>
-                    </button>
-                  );
-                })}
-              </fieldset>
-            </details>
+                        <span className="candidate-caption">
+                          <strong>
+                            候选 {index + 1} · {item.id.slice(0, 8)}
+                          </strong>
+                          <span>
+                            {new Date(item.created_at).toLocaleTimeString("zh-CN", {
+                              hour12: false,
+                            })}{" "}
+                            · {item.source.target_snapshot.target.name}
+                          </span>
+                          <small>
+                            检查{item.checks.status === "passed" ? "通过" : item.checks.status} ·{" "}
+                            {adopted ? "用户已采用" : rejected ? "用户已拒绝" : "尚未采用"}
+                            {pending ? ` · ${pending} 条待复核` : ""}
+                          </small>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </fieldset>
+              </details>
+              {selected.kind === "video" && (
+                <button
+                  type="button"
+                  ref={focusButton}
+                  aria-pressed={focused}
+                  onClick={() => {
+                    if (focused)
+                      void exitFocus().catch(() => setFocusMessage("请使用浏览器退出全屏。"));
+                    else enterFocus();
+                  }}
+                >
+                  {focused ? "退出全屏审片" : "全屏审片"}
+                </button>
+              )}
+            </div>
             <ReviewPlayer
               key={selected.id}
               version={selected}
@@ -416,7 +501,9 @@ export function Versions({
               onFeedback={() => setFeedbackOpen(true)}
               onOpenRun={(id) => {
                 setFeedbackOpen(false);
-                onOpenRun(id);
+                void exitFocus()
+                  .then(() => onOpenRun(id))
+                  .catch(() => setFocusMessage("请先退出全屏再查看运行详情。"));
               }}
             />
           </div>

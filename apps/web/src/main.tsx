@@ -137,7 +137,7 @@ function App() {
               </details>
               <Settings />
               <Resources />
-              <Maintenance />
+              <Maintenance active={active === "project"} />
             </div>
           </>
         )}

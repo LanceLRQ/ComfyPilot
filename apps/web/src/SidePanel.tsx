@@ -5,6 +5,7 @@ export function SidePanel({
   title,
   open,
   dock = false,
+  confirmation = false,
   onClose,
   children,
 }: {
@@ -12,6 +13,7 @@ export function SidePanel({
   title: string;
   open: boolean;
   dock?: boolean;
+  confirmation?: boolean;
   onClose: () => void;
   children: ReactNode;
 }) {
@@ -41,7 +43,9 @@ export function SidePanel({
       panel.close();
       if (modal) panel.showModal();
       else panel.show();
-      panel.querySelector<HTMLElement>("textarea, h2")?.focus({ preventScroll: true });
+      panel
+        .querySelector<HTMLElement>(confirmation ? "[data-cancel]" : "textarea, h2")
+        ?.focus({ preventScroll: true });
       window.scrollTo(scrollX, scrollY);
     }
     update();
@@ -51,12 +55,12 @@ export function SidePanel({
       wide.removeEventListener("change", update);
       window.removeEventListener("resize", update);
     };
-  }, [open, dock]);
+  }, [open, dock, confirmation]);
   return (
     <dialog
       ref={dialog}
       id={id}
-      className="side-panel settings"
+      className={`side-panel settings${confirmation ? " confirmation-panel" : ""}`}
       data-dock={dock}
       aria-labelledby={`${id}-title`}
       onCancel={(event) => {

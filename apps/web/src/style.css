@@ -527,6 +527,7 @@ html:has(dialog:modal) {
   overflow-y: auto;
   overflow-wrap: anywhere;
   overscroll-behavior: contain;
+  line-height: 1.6;
 }
 .panel-body > .review-feedback {
   border: 0;
@@ -541,6 +542,7 @@ html:has(dialog:modal) {
 }
 .run-fields {
   margin: 20px 0;
+  line-height: 1.6;
 }
 .run-fields > div {
   display: grid;
@@ -639,6 +641,7 @@ html:has(dialog:modal) {
 .settings .candidate-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  grid-auto-rows: max-content;
   gap: 8px;
   max-height: 200px;
   overflow-y: auto;
@@ -680,6 +683,7 @@ html:has(dialog:modal) {
   gap: 4px;
   min-width: 0;
   overflow-wrap: anywhere;
+  line-height: 1.6;
 }
 .candidate-caption small {
   color: var(--muted);
@@ -717,8 +721,10 @@ html:has(dialog:modal) {
 }
 .timeline-caption {
   display: grid;
+  gap: 4px;
   min-width: 0;
   font-size: 12px;
+  line-height: 1.6;
 }
 .timeline-label {
   white-space: nowrap;
@@ -839,5 +845,97 @@ html:has(dialog:modal) {
   .settings .timeline-row {
     grid-template-columns: 100px minmax(0, 1fr);
     gap: 8px;
+  }
+}
+.candidate-tools {
+  position: relative;
+}
+.candidate-tools .candidate-picker {
+  min-width: 0;
+  margin-bottom: 0;
+}
+.candidate-tools summary {
+  padding-right: 128px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  list-style-position: inside;
+}
+.candidate-tools > button {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-height: 44px;
+}
+.review-workbench[data-focus="true"] {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  margin: 0;
+  padding: 16px;
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  overflow: auto;
+  background: #1b221e;
+  border: 0;
+}
+.review-workbench[data-focus="true"] .review-desk {
+  grid-template-columns: minmax(0, 1fr);
+}
+.review-workbench[data-focus="true"] .review-clips,
+.review-workbench[data-focus="true"] .mobile-review-views {
+  display: none;
+}
+.review-workbench[data-focus="true"] .review-panes {
+  grid-template-columns: 1fr 1fr;
+}
+.review-workbench[data-focus="true"] .review-detail .review-panes > figure {
+  display: block;
+}
+.review-workbench[data-focus="true"] .review-panes video {
+  max-height: max(160px, calc(100dvh - 300px));
+  object-fit: contain;
+}
+.review-workbench[data-focus="true"] .side-panel[data-dock="true"]:not(:modal) {
+  top: 0;
+  max-height: calc(100dvh - 100px);
+}
+.side-panel.confirmation-panel:modal {
+  inset: 0;
+  margin: auto;
+  width: min(600px, calc(100vw - 24px));
+  height: fit-content;
+  max-height: calc(100dvh - 24px);
+}
+.settings .cleanup-acknowledgement {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  margin: 16px 0;
+}
+.settings .cleanup-acknowledgement input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+}
+.settings button.destructive {
+  color: #ffd3ca;
+  background: #48251f;
+  border-color: #b8796e;
+}
+.asset-maintenance > label + label,
+.asset-maintenance > label + .settings-actions {
+  margin-top: 16px;
+}
+.asset-maintenance li {
+  margin: 12px 0;
+  line-height: 1.7;
+}
+@media (min-width: 1200px) {
+  .review-workbench[data-focus="true"] .review-desk:has(> .side-panel[open]:not(:modal)) {
+    grid-template-columns: minmax(0, 1fr) 360px;
   }
 }
