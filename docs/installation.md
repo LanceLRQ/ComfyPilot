@@ -31,7 +31,7 @@ distribution-path 仅读取路径，不建项目、不联网。安装版目录�
 | 项目 / 数据库 / 备份 | 配置与身份 schema=1；SQLite user_version=14；目录备份 format=1。SQLite 只接受已识别的本机文件系统 |
 | 媒体工具 | 平台 PATH 需要 FFmpeg/ffprobe，视频处理需 libx264；macOS FFmpeg 8.1.1、Linux FFmpeg 6.1.1 已验，缺项有阻塞原因；H.264 MP4 为浏览器基准 |
 | ComfyUI / 生成配方 | 已验 ComfyUI 0.38.0 / RTX 3090 的 H3 人物替换；模型、节点与固定依赖见 h3-recipe.md，生成证据见 h3-validation.md；不是任意节点/工作流兼容声明 |
-| 素材桥接 | protocol=1；upload/download/stat/known 为传输基线；清理另需 delete。生产旧扩展尚需升级，受控新桥接真实删除已验 |
+| 素材桥接 | protocol=1；upload/download/stat/known 为传输基线；清理另需 delete。2026-10-29 已完成既有生产桥接升级、原容器重启和两新项目受限删除；原件与既有媒体哈希保持，详见 remote-assets.md |
 | 宿主 | Codex 0.164.0、Claude Code 2.1.302 接入格式与部分真实 Claude/GLM-5.3 场景已验；双宿主自动发现、权限、目录选择及退出完整矩阵继续保留 |
 | 本机与远程 | 两种部署已完成真实生成/收片；当前两具名执行端同一 GPU 地址，独立 ComfyUI 实例切换仍保留 |
 
@@ -45,6 +45,6 @@ FFmpeg 版本以验收记录为准，系统工具不由 Python lock 安装。GPU
 4. 新程序加载项目时可能增量升级数据库。较旧程序遇到较新格式会拒绝启动；不支持逆向迁移。回退使用原环境及升级前完整项目副本，先停止新服务、归档新目录；不能把旧 wheel 指向已经升级的数据库，也不能并行运行两个具有相同 UUID 的副本。
 5. 新版 export/restore 生成新 UUID、暂停、禁用目标，不继承旧远端所有权；该恢复不等于把已升级库降级。用户需要接续时按当前版本重新预检和明确提出方案，不能恢复后自动重放。
 
-ComfyUI 扩展与平台升级分别处理：先核对外部队列空闲及原启动方式，保存既有扩展，再换入 bridge-path 目录并重启 ComfyUI、验证 capabilities。只有 HTTP 地址时不能安装。当前生产旧桥接尚未升级 delete，不应据此标为已部署；失败时移出本次扩展并恢复原文件/启动方式，不删除用户素材。
+ComfyUI 扩展与平台升级分别处理：先核对外部队列空闲及原启动方式，保存既有扩展，再换入 bridge-path 目录并重启 ComfyUI、验证 capabilities。只有 HTTP 地址时不能安装。既有生产桥接已补验升级与受限删除；其他部署仍须逐一核对，不能由此推断均已升级。失败时移出本次扩展并恢复原文件/启动方式，不删除用户素材。
 
 M4 交付不自动上传 PyPI、不创建公开 Release、不推送 Git。首版完整发布判定由逐条 AC 验收及保留项决定。

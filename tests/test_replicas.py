@@ -186,3 +186,26 @@ def test_adapter_rejects_unsafe_or_changed_input(tmp_path, media_files, defect):
         target["assets"] = None
     with pytest.raises(ProjectError):
         asyncio.run(put_input(project, target, asset_id, "run-a"))
+
+
+@pytest.mark.parametrize("writable", [False, True])
+def test_local_delete_capability_requires_output_write_access(tmp_path, monkeypatch, writable):
+    import os
+
+    from comfypilot.replicas import probe_asset_capabilities
+
+    project = initialize_project(tmp_path / "project")
+    target = local_target(project, tmp_path / "comfy")
+    real_access = os.access
+    monkeypatch.setattr(
+        os,
+        "access",
+        lambda path, mode: (
+            writable
+            if str(path) == target["assets"]["output_dir"] and mode == os.W_OK
+            else real_access(path, mode)
+        ),
+    )
+    capabilities = asyncio.run(probe_asset_capabilities(project, target))
+    assert capabilities["media_transfer"]["status"] == "available"
+    assert capabilities["managed_delete"]["status"] == ("available" if writable else "unsupported")

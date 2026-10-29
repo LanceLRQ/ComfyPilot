@@ -206,7 +206,7 @@ def test_platform_bridge_adapter_transfers_real_media_and_probes_capability(tmp_
             ).poll()
             status = get_target_status(project, instance, os.getpid(), "remote")
             assert status["capabilities"]["media_transfer"]["status"] == "available"
-            assert status["capabilities"]["managed_delete"]["status"] == "unsupported"
+            assert status["capabilities"]["managed_delete"]["status"] == "available"
             output.write_bytes(b"changed")
             with pytest.raises(ProjectError) as error:
                 await transfer_output(
@@ -271,5 +271,45 @@ def test_bridge_delete_is_fingerprinted_replayable_and_serial_with_reupload(tmp_
             assert (
                 await client.request("DELETE", base + "/delete", json=request)
             ).status_code == 400
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("http_status,expected", [(200, "unsupported"), (503, "unknown")])
+def test_delete_capability_keeps_legacy_and_failed_bridges_distinct(
+    tmp_path, http_status, expected
+):
+    from comfypilot.project import initialize_project
+    from comfypilot.replicas import probe_asset_capabilities
+
+    project = initialize_project(tmp_path / "project")
+
+    async def scenario():
+        async def capabilities(_request):
+            return web.json_response(
+                {
+                    "protocol": 1,
+                    "namespace": "ComfyPilot",
+                    "features": ["upload", "download", "stat", "known"],
+                },
+                status=http_status,
+            )
+
+        app = web.Application()
+        app.router.add_get("/comfypilot/v1/capabilities", capabilities)
+        async with TestServer(app) as server:
+            result = await probe_asset_capabilities(
+                project,
+                {
+                    "id": "remote",
+                    "name": "旧桥接或故障端",
+                    "base_url": str(server.make_url("/")).rstrip("/"),
+                    "assets": {"mode": "bridge"},
+                },
+            )
+            assert result["managed_delete"]["status"] == expected
+            assert result["media_transfer"]["status"] == (
+                "available" if http_status == 200 else "unknown"
+            )
 
     asyncio.run(scenario())

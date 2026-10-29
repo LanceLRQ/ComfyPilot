@@ -98,12 +98,19 @@ async def inspect_replica(project: Project, target: dict, role: str, relative: s
 async def probe_asset_capabilities(project: Project, target: dict) -> dict:
     assets = target.get("assets")
     status, reason = "unsupported", "未配置素材适配器。"
+    deletion = {"status": status, "reason": reason}
     if assets:
         try:
             if assets["mode"] == "bridge":
                 from comfypilot.asset_bridge import probe_bridge
 
-                await probe_bridge(project, target)
+                bridge = await probe_bridge(project, target)
+                deletion = {
+                    "status": "available" if "delete" in bridge["features"] else "unsupported",
+                    "reason": "已验证受限删除能力。"
+                    if "delete" in bridge["features"]
+                    else "旧桥接未声明 delete，请按说明升级扩展。",
+                }
             else:
                 for role, permission in (("input", os.W_OK), ("output", os.R_OK)):
                     local_path(
@@ -114,6 +121,11 @@ async def probe_asset_capabilities(project: Project, target: dict) -> dict:
                     )
                     if not os.access(assets[role + "_dir"], permission):
                         raise ProjectError("media_transfer_unavailable", "本机素材目录权限不足。")
+                writable = os.access(assets["output_dir"], os.W_OK)
+                deletion = {
+                    "status": "available" if writable else "unsupported",
+                    "reason": "已验证受管目录写权限。" if writable else "输出目录不可写。",
+                }
             status, reason = "available", "已验证配置的素材适配器。"
         except (ProjectError, OSError) as error:
             status = (
@@ -122,8 +134,13 @@ async def probe_asset_capabilities(project: Project, target: dict) -> dict:
                 else "unknown"
             )
             reason = error.code if isinstance(error, ProjectError) else "directory_unavailable"
+            deletion = {"status": status, "reason": reason}
     return {
-        name: {"status": status, "reason": reason} for name in ("media_transfer", "managed_listing")
+        **{
+            name: {"status": status, "reason": reason}
+            for name in ("media_transfer", "managed_listing")
+        },
+        "managed_delete": deletion,
     }
 
 
