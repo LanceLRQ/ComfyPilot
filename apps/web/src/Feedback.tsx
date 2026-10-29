@@ -18,10 +18,12 @@ const reply = z.object({ error: z.object({ code: z.string(), message: z.string()
 export function Feedback({
   version,
   video,
+  onPause,
   onLocate,
 }: {
   version: Version;
   video: RefObject<HTMLVideoElement | null>;
+  onPause: () => void;
   onLocate: (version: string, time: number) => void;
 }) {
   const { snapshot, stale } = useWorkspace();
@@ -63,6 +65,7 @@ export function Feedback({
   async function capture() {
     if (!video.current || !canvas.current || !snapshot || video.current.readyState < 2) return;
     const player = video.current;
+    onPause();
     player.pause();
     const time = player.currentTime;
     const frame = canvas.current;

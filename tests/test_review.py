@@ -77,6 +77,25 @@ def test_review_does_not_infer_temporal_alignment_from_matching_duration(generat
     assert detail["comparison"]["source_asset_id"]
     assert "offset_seconds" not in detail["comparison"]
     assert "声明" in detail["comparison"]["reason"]
+    assert "按输入片段的相对时间对照" in detail["comparison"]["reason"]
+    assert "不保证动作逐帧一致" in detail["comparison"]["reason"]
+    before = get_execution(project)
+    command(
+        project,
+        "save_feedback",
+        version_id=version["id"],
+        kind="note",
+        text="按相对时间对照的测试备注",
+        source="web_user",
+        start_seconds=0.5,
+        end_seconds=1.0,
+    )
+    from comfypilot.review import list_review_items
+
+    assert list_review_items(project)["feedback"][0]["original_range"] is None
+    after = get_execution(project)
+    assert after["runs"] == before["runs"]
+    assert after["plans"] == before["plans"]
 
 
 def test_declared_map_is_unavailable_when_output_timing_does_not_match(review_workspace):

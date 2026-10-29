@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
+import { createComparisonPlayback, type PlaybackState } from "./comparison";
 import { Decisions, Delivery } from "./Decisions";
 import { Feedback } from "./Feedback";
 import { Monitor } from "./Monitor";
@@ -36,9 +37,11 @@ function clipKey(version: Version) {
 function ReviewPlayer({
   version,
   candidate,
+  controllerRef,
 }: {
   version: Version;
   candidate: React.RefObject<HTMLVideoElement | null>;
+  controllerRef: React.RefObject<ReturnType<typeof createComparisonPlayback> | null>;
 }) {
   const original = useRef<HTMLVideoElement>(null);
   const [detail, setDetail] = useState<z.infer<typeof detailSchema>["data"] | null>(null);
@@ -57,34 +60,34 @@ function ReviewPlayer({
     return () => controller.abort();
   }, [version.id]);
   const mapping = detail?.comparison;
-  const synchronized = mapping?.status === "known";
+  const [playback, setPlayback] = useState<PlaybackState>({
+    time: 0,
+    duration: 0,
+    frameSeconds: 0,
+    playing: false,
+    status: "loading",
+    message: "正在加载视频…",
+  });
+  useEffect(() => {
+    if (version.kind !== "video" || !mapping || !candidate.current) return;
+    const controller = createComparisonPlayback(
+      candidate.current,
+      original.current,
+      {
+        offset: mapping.status === "known" ? mapping.offset_seconds : 0,
+        durationLimit: mapping.status === "known" ? mapping.duration_seconds : undefined,
+        fps: version.media.fps,
+      },
+      setPlayback,
+    );
+    controllerRef.current = controller;
+    return () => {
+      controller.destroy();
+      controllerRef.current = null;
+    };
+  }, [candidate, controllerRef, mapping, version.kind, version.media.fps]);
   const url = `/api/versions/${version.id}/content`;
 
-  function seek(from: "candidate" | "original") {
-    if (!synchronized || !candidate.current || !original.current) return;
-    const offset = mapping?.offset_seconds ?? 0;
-    if (from === "candidate") {
-      const time = candidate.current.currentTime + offset;
-      if (Math.abs(original.current.currentTime - time) > 0.08) original.current.currentTime = time;
-    } else {
-      const time = Math.min(
-        mapping?.duration_seconds ?? Infinity,
-        Math.max(0, original.current.currentTime - offset),
-      );
-      if (Math.abs(candidate.current.currentTime - time) > 0.08)
-        candidate.current.currentTime = time;
-    }
-  }
-  function play(from: "candidate" | "original") {
-    if (!synchronized) return;
-    seek(from);
-    const peer = from === "candidate" ? original.current : candidate.current;
-    if (peer?.paused)
-      void peer.play().catch(() => setError("浏览器尚未允许同步播放，请手动播放两侧。"));
-  }
-  function pause(from: "candidate" | "original") {
-    if (synchronized) (from === "candidate" ? original.current : candidate.current)?.pause();
-  }
   return (
     <article className="review-detail">
       <div className="section-heading">
@@ -99,21 +102,7 @@ function ReviewPlayer({
         <figure>
           <figcaption>候选结果</figcaption>
           {version.kind === "video" ? (
-            <video
-              ref={candidate}
-              controls
-              preload="metadata"
-              src={url}
-              aria-label="候选结果"
-              onTimeUpdate={() => seek("candidate")}
-              onSeeked={() => seek("candidate")}
-              onPlay={() => play("candidate")}
-              onPause={() => pause("candidate")}
-              onRateChange={() => {
-                if (synchronized && original.current && candidate.current)
-                  original.current.playbackRate = candidate.current.playbackRate;
-              }}
-            >
+            <video ref={candidate} muted playsInline preload="auto" src={url} aria-label="候选结果">
               <track kind="captions" />
             </video>
           ) : (
@@ -121,19 +110,18 @@ function ReviewPlayer({
           )}
         </figure>
         <figure>
-          <figcaption>{synchronized ? "原片 · 同步定位" : "输入视频 · 并排参考"}</figcaption>
+          <figcaption>
+            {mapping?.status === "known" ? "原片 · 按映射对照" : "输入视频 · 按时间对照"}
+          </figcaption>
           {mapping?.source_asset_id ? (
             <video
               ref={original}
-              controls
+              controls={version.kind !== "video"}
               muted
-              preload="metadata"
+              playsInline
+              preload="auto"
               aria-label="原片参考"
               src={`/api/assets/${mapping.source_asset_id}/content`}
-              onLoadedMetadata={() => seek("candidate")}
-              onSeeked={() => seek("original")}
-              onPlay={() => play("original")}
-              onPause={() => pause("original")}
             >
               <track kind="captions" />
             </video>
@@ -142,9 +130,58 @@ function ReviewPlayer({
           )}
         </figure>
       </div>
+      {version.kind === "video" && (
+        <>
+          <fieldset className="comparison-controls" aria-label="对照播放控制">
+            <button
+              type="button"
+              disabled={!playback.duration}
+              onClick={() => controllerRef.current?.toggle()}
+            >
+              {playback.playing ? "暂停" : playback.status === "ended" ? "重播" : "播放"}
+            </button>
+            <button
+              type="button"
+              aria-label="上一帧"
+              disabled={!playback.duration || !playback.frameSeconds}
+              onClick={() => controllerRef.current?.step(-1)}
+            >
+              −1 帧
+            </button>
+            <button
+              type="button"
+              aria-label="下一帧"
+              disabled={!playback.duration || !playback.frameSeconds}
+              onClick={() => controllerRef.current?.step(1)}
+            >
+              +1 帧
+            </button>
+            <input
+              type="range"
+              aria-label="对照播放进度"
+              min="0"
+              max={playback.duration}
+              step="0.001"
+              value={playback.time}
+              disabled={!playback.duration}
+              onChange={(event) => controllerRef.current?.seek(Number(event.target.value))}
+            />
+            <output>
+              {playback.time.toFixed(3)} / {playback.duration.toFixed(3)} 秒
+            </output>
+          </fieldset>
+          <p role="status" className={playback.status === "error" ? "error" : "settings-note"}>
+            {playback.message}
+          </p>
+          <p className="settings-note">
+            按时间对照，不保证动作逐帧一致。
+            {!playback.frameSeconds && "视频帧率未知，逐帧查看暂不可用。"}
+          </p>
+        </>
+      )}
       <p className="settings-note">
         {mapping?.reason ?? "正在读取时间映射…"}
-        {synchronized && ` 原片时间 = 候选时间 + ${mapping?.offset_seconds} 秒。`}
+        {mapping?.status === "known" && ` 原片时间 = 候选时间 + ${mapping.offset_seconds} 秒。`}
       </p>
       {error && (
         <p className="error" role="alert">
@@ -171,6 +208,7 @@ function ReviewPlayer({
 
 export function Versions() {
   const candidate = useRef<HTMLVideoElement>(null);
+  const controllerRef = useRef<ReturnType<typeof createComparisonPlayback> | null>(null);
   const { snapshot, stale } = useWorkspace();
   const versions = snapshot?.data.versions ?? [];
   const [clip, setClip] = useState("");
@@ -267,11 +305,17 @@ export function Versions() {
                 ))}
               </select>
             </label>
-            <ReviewPlayer key={selected.id} version={selected} candidate={candidate} />
+            <ReviewPlayer
+              key={selected.id}
+              version={selected}
+              candidate={candidate}
+              controllerRef={controllerRef}
+            />
             <Decisions version={selected} />
             <Feedback
               version={selected}
               video={candidate}
+              onPause={() => controllerRef.current?.pause()}
               onLocate={(id, time) => {
                 const version = versions.find((item) => item.id === id);
                 if (!version) return;
@@ -279,6 +323,7 @@ export function Versions() {
                 setClip(key);
                 setChoices((previous) => ({ ...previous, [key]: id }));
                 window.setTimeout(() => {
+                  controllerRef.current?.pause();
                   if (candidate.current) candidate.current.currentTime = time;
                 }, 100);
               }}

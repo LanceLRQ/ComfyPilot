@@ -4,7 +4,7 @@
 
 产品目标：用户在 Claude Code、Codex 等工具里提需求，Agent 按 Skill 在当前项目目录启动 ComfyPilot，通过 MCP 管理任务与执行。用户打开浏览器看进度、审片和提出修改意见。生成可以交给本机或远程 ComfyUI。
 
-当前已实现 M1/1.1–1.6 和 M2 第一条视频链路：项目服务、默认待机的 stdio MCP、显式连接、多目标配置、资源快照、素材导入与显式片段、H3 配方、持久提交/对账、[自动收片和基础预览](docs/collection.md)、幂等恢复及远程素材桥接。[真实链路验收](docs/h3-validation.md)已覆盖 macOS 远程桥接与 Linux 同机目录模式，包含重启接续和工具缺失后的恢复。M3 已接入逐段审片、截图圈选、返工与明确采用、共享监控、MCP 控制和 Agent 新会话接续；[M3 联合验收](docs/m3-validation.md)区分已验证场景与保留项。[独立执行端在途切换](docs/target-switch-validation.md)已补验，旧 Run 继续按原目标收片，后续任务按新修订执行，授权范围与累计额度保持。M1/1.7 双宿主完整矩阵仍保留。M2/2.2 的[独立安装、失败回退与画布往返](docs/h3-install-validation.md)已补验，权重从零下载和其他原实测缺项仍保留；M4 已实现[清理](docs/asset-cleanup.md)、[LAN 审片](docs/lan-review.md)及[备份恢复](docs/project-backup.md)，[安装与兼容说明](docs/installation.md)随包交付；发布仍受真实环境保留项限制。文档更新于 2026-10-29（Asia/Shanghai）。
+当前已实现 M1/1.1–1.6 和 M2 第一条视频链路：项目服务、默认待机的 stdio MCP、显式连接、多目标配置、资源快照、素材导入与显式片段、H3 配方、持久提交/对账、[自动收片和基础预览](docs/collection.md)、幂等恢复及远程素材桥接。[真实链路验收](docs/h3-validation.md)已覆盖 macOS 远程桥接与 Linux 同机目录模式，包含重启接续和工具缺失后的恢复。M3 已接入逐段审片、[原片与渲染片共用控制的时间对照及逐帧查看](docs/review-workbench.md)、截图圈选、返工与明确采用、共享监控、MCP 控制和 Agent 新会话接续；[M3 联合验收](docs/m3-validation.md)区分已验证场景与保留项。[独立执行端在途切换](docs/target-switch-validation.md)已补验，旧 Run 继续按原目标收片，后续任务按新修订执行，授权范围与累计额度保持。M1/1.7 双宿主完整矩阵仍保留。M2/2.2 的[独立安装、失败回退与画布往返](docs/h3-install-validation.md)已补验，权重从零下载和其他原实测缺项仍保留；M4 已实现[清理](docs/asset-cleanup.md)、[LAN 审片](docs/lan-review.md)及[备份恢复](docs/project-backup.md)，[安装与兼容说明](docs/installation.md)随包交付；发布仍受真实环境保留项限制。文档更新于 2026-10-29（Asia/Shanghai）。
 
 ## 本地开发与运行
 

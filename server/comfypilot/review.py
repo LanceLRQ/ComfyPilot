@@ -34,7 +34,7 @@ def get_review_version(project: Project, version_id: str) -> dict:
     comparison = {
         "status": "unknown",
         "source_asset_id": video["id"] if video else None,
-        "reason": "配方未声明保留输入时间轴，仅供并排参考，不能推断逐帧对应。",
+        "reason": "配方未声明保留输入时间轴，按输入片段的相对时间对照，不保证动作逐帧一致。",
     }
     if declaration and video:
         media = version["media"]
@@ -61,7 +61,9 @@ def get_review_version(project: Project, version_id: str) -> dict:
                 "reason": "按配方保留时间轴声明及片段保存的时间映射定位。",
             }
         else:
-            comparison["reason"] = "输出与输入的帧率或时长不符合声明，时间映射不可用。"
+            comparison["reason"] = (
+                "输出与输入的帧率或时长不符合声明，改按输入片段相对时间对照，不保证动作逐帧一致。"
+            )
     return {"version": version, "comparison": comparison}
 
 

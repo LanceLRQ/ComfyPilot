@@ -114,6 +114,7 @@ export const workspaceSchema = z.object({
           width: z.number(),
           height: z.number(),
           frame_count: z.number().nullable(),
+          fps: z.string().nullable().optional(),
         }),
         checks: z.object({ status: z.string() }),
         created_at: z.string(),
