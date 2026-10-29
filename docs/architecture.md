@@ -325,6 +325,8 @@ AssetReplica 区分本地原始文件、播放代理、远端输入、远端输�
 
 Web 使用四个 hash 视图，默认 review，另有 tasks、assets、project；沿用 React/Vite，不引入路由或 UI 依赖。WorkspaceProvider 在壳层保持单一订阅；面板隐藏而不因切页卸载，审片通过 active 属性暂停共同播放而不重建控制器。任务视图承载原 Monitor 与 ProductionActivity，ProductionSummary 从同一快照计算常驻摘要。项目元数据压缩到顶部/项目详情；本机管理组件仅在 local_control 为 true 时挂载，LAN 手写管理 hash 回落审片，不改变 API 的权限规则。
 
+SidePanel 复用原生 dialog：反馈在宽度至少 1200 px 时通过 show 与舞台并排，较窄时通过 showModal 展示；RunDrawer 始终为模态抽屉。原生模态提供背景 inert，组件处理 Tab/Shift+Tab 循环、Esc、初始焦点与返回入口；断点切换保留同一内容 DOM。Feedback 常驻于面板内，沿用按版本索引的草稿与原命令；开关不卸载或重挂播放器。运行选择提升至 App，从候选/任务条目打开，切视图关闭抽屉；摘要复用 WorkspaceProvider，完整证据仅本机按按钮 GET 既有 evidence 接口，关闭中止未完成读取，不增加轮询或写命令。
+
 Feedback 绑定 artifact_version_id，包含整份说明、video_range、截图引用和归一化矩形。视频保存片段内时间及原片映射。播放器共用控制条，以参考视频为主时钟做 80 ms 纠偏、缓冲联动和按候选实际 FPS 逐帧查看。已知映射换算完整原片偏移；变速或偏移未知时按输入片段相对时间联动，显示“按时间对照，不保证动作逐帧一致”，comparison 仍为 unknown，反馈 original_range 仍为空。播放联动不修改配方、Run、授权范围或累计额度。
 
 用户可用“需要修改”“通过并采用”和备注完成主要操作。“需要修改”对当前有效方案写反馈并在同一事务设 review_hold；Worker 领取和保存 intent 前都检查。已写 intent 属于在途，不承诺撤回；其他未关联任务不受影响。

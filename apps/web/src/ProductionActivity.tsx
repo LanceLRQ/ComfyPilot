@@ -1,6 +1,6 @@
 import { useWorkspace } from "./Workspace";
 
-const states: Record<string, string> = {
+export const runStates: Record<string, string> = {
   queued: "等待派发",
   cancelled: "已取消",
   dispatching: "准备提交",
@@ -12,7 +12,7 @@ const states: Record<string, string> = {
   failed: "失败",
 };
 
-export function ProductionActivity() {
+export function ProductionActivity({ onOpenRun }: { onOpenRun: (id: string) => void }) {
   const { snapshot } = useWorkspace();
   const data = snapshot?.data;
   return (
@@ -32,13 +32,16 @@ export function ProductionActivity() {
           <li key={run.id}>
             <strong>
               {run.id.slice(0, 8)} · 步骤 {run.action_index + 1} ·{" "}
-              {states[run.status] ?? run.status}
+              {runStates[run.status] ?? run.status}
             </strong>
             <span>
               目标 {run.document.step?.target_id ?? "未知"} · 片段{" "}
               {run.document.step?.segment_id?.slice(0, 8) ?? "未声明"}
             </span>
             {run.document.dispatch_blocked && <span>{run.document.dispatch_blocked.code}</span>}
+            <button type="button" aria-haspopup="dialog" onClick={() => onOpenRun(run.id)}>
+              查看运行 {run.id.slice(0, 8)} 详情
+            </button>
           </li>
         ))}
       </ul>

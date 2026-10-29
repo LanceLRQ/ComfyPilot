@@ -177,7 +177,7 @@ export function Feedback({
   }
   return (
     <section className="review-feedback" aria-labelledby="feedback-title">
-      <h3 id="feedback-title">审片反馈</h3>
+      <h3 id="feedback-title">意见与截图</h3>
       <p className="settings-note">
         “需要修改”会阻止关联任务的后续派发，已经提交的运行继续对账和收片。圈选坐标相对截图画面。
       </p>
@@ -300,6 +300,8 @@ export function Feedback({
           保留草稿，采用当前修订
         </button>
       )}
+      <h3 className="feedback-history-title">此候选的反馈历史（{feedback.length}）</h3>
+      {!feedback.length && <p className="settings-note">尚无反馈，草稿只在提交后保存为记录。</p>}
       <ul className="feedback-items">
         {feedback.map((item) => (
           <li key={item.id}>

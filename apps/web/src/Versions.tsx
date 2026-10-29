@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createComparisonPlayback, type PlaybackState } from "./comparison";
 import { Decisions, Delivery } from "./Decisions";
 import { Feedback } from "./Feedback";
+import { SidePanel } from "./SidePanel";
 import { useWorkspace, workspaceSchema } from "./Workspace";
 
 const versionSchema = workspaceSchema.shape.data.shape.versions.element;
@@ -36,10 +37,16 @@ function ReviewPlayer({
   version,
   candidate,
   controllerRef,
+  feedbackOpen,
+  onFeedback,
+  onOpenRun,
 }: {
   version: Version;
   candidate: React.RefObject<HTMLVideoElement | null>;
   controllerRef: React.RefObject<ReturnType<typeof createComparisonPlayback> | null>;
+  feedbackOpen: boolean;
+  onFeedback: () => void;
+  onOpenRun: (id: string) => void;
 }) {
   const original = useRef<HTMLVideoElement>(null);
   const [detail, setDetail] = useState<z.infer<typeof detailSchema>["data"] | null>(null);
@@ -166,7 +173,10 @@ function ReviewPlayer({
           </p>
         </>
       )}
-      <Decisions version={version} />
+      <Decisions version={version} feedbackOpen={feedbackOpen} onFeedback={onFeedback} />
+      <button type="button" aria-haspopup="dialog" onClick={() => onOpenRun(version.run_id)}>
+        查看当前候选运行详情
+      </button>
       {error && (
         <p className="error" role="alert">
           {error}
@@ -201,7 +211,13 @@ function ReviewPlayer({
   );
 }
 
-export function Versions({ active = true }: { active?: boolean }) {
+export function Versions({
+  active = true,
+  onOpenRun,
+}: {
+  active?: boolean;
+  onOpenRun: (id: string) => void;
+}) {
   const candidate = useRef<HTMLVideoElement>(null);
   const controllerRef = useRef<ReturnType<typeof createComparisonPlayback> | null>(null);
   useEffect(() => {
@@ -211,6 +227,7 @@ export function Versions({ active = true }: { active?: boolean }) {
   const versions = snapshot?.data.versions ?? [];
   const [clip, setClip] = useState("");
   const [choices, setChoices] = useState<Record<string, string>>({});
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const groups = new Map<string, Version[]>();
   for (const version of versions.filter((item) => item.ready)) {
     const key = clipKey(version);
@@ -305,7 +322,26 @@ export function Versions({ active = true }: { active?: boolean }) {
               version={selected}
               candidate={candidate}
               controllerRef={controllerRef}
+              feedbackOpen={feedbackOpen}
+              onFeedback={() => setFeedbackOpen(true)}
+              onOpenRun={(id) => {
+                setFeedbackOpen(false);
+                onOpenRun(id);
+              }}
             />
+          </div>
+        )}
+        {selected && (
+          <SidePanel
+            id="feedback-panel"
+            title="审片反馈"
+            open={active && feedbackOpen}
+            dock
+            onClose={() => setFeedbackOpen(false)}
+          >
+            <p className="settings-note">
+              候选 {selected.id.slice(0, 8)} · 关闭面板保留草稿；截图或定位反馈会暂停两路播放。
+            </p>
             <Feedback
               version={selected}
               video={candidate}
@@ -322,7 +358,7 @@ export function Versions({ active = true }: { active?: boolean }) {
                 }, 100);
               }}
             />
-          </div>
+          </SidePanel>
         )}
       </div>
       <Delivery />

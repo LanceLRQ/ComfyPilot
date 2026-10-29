@@ -8,7 +8,15 @@ const resultSchema = z.object({
   error: z.object({ code: z.string(), message: z.string() }).optional(),
 });
 
-export function Decisions({ version }: { version: Version }) {
+export function Decisions({
+  version,
+  feedbackOpen,
+  onFeedback,
+}: {
+  version: Version;
+  feedbackOpen: boolean;
+  onFeedback: () => void;
+}) {
   const { snapshot, stale } = useWorkspace();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -83,9 +91,9 @@ export function Decisions({ version }: { version: Version }) {
         <button
           type="button"
           className="action-link"
-          onClick={() => {
-            document.getElementById("feedback-title")?.scrollIntoView({ block: "start" });
-          }}
+          aria-controls="feedback-panel"
+          aria-expanded={feedbackOpen}
+          onClick={onFeedback}
         >
           填写修改意见
         </button>

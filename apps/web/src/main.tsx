@@ -6,6 +6,7 @@ import { Maintenance } from "./Maintenance";
 import { Monitor, ProductionSummary } from "./Monitor";
 import { ProductionActivity } from "./ProductionActivity";
 import { Resources } from "./Resources";
+import { RunDrawer } from "./RunDrawer";
 import { Settings } from "./Settings";
 import { Versions } from "./Versions";
 import { WorkspaceProvider } from "./Workspace";
@@ -31,9 +32,11 @@ type View = keyof typeof views;
 
 function App() {
   const [view, setView] = useState<View>("review");
+  const [runId, setRunId] = useState<string | null>(null);
   useEffect(() => {
     function navigate() {
       const value = window.location.hash.slice(1);
+      setRunId(null);
       setView(value === "tasks" || value === "assets" || value === "project" ? value : "review");
       window.scrollTo(0, 0);
     }
@@ -106,10 +109,10 @@ function App() {
         )}
         <ProductionSummary />
         <div hidden={active !== "review"}>
-          <Versions active={active === "review"} />
+          <Versions active={active === "review"} onOpenRun={setRunId} />
         </div>
         <div hidden={active !== "tasks"} className="workspace settings task-view">
-          <ProductionActivity />
+          <ProductionActivity onOpenRun={setRunId} />
           <Monitor />
         </div>
         {local && (
@@ -144,6 +147,7 @@ function App() {
           </span>
           <span>{updatedAt ? `项目连接更新于 ${updatedAt}` : "正在读取…"}</span>
         </footer>
+        <RunDrawer id={runId} onClose={() => setRunId(null)} />
       </main>
     </div>
   );

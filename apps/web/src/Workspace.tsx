@@ -49,6 +49,8 @@ export const workspaceSchema = z.object({
         has_intent: z.boolean(),
         started_at: z.string().nullable(),
         document: z.object({
+          receipt: z.object({ prompt_id: z.string() }).optional(),
+          collection: z.object({ phase: z.string() }).optional(),
           step: z.object({ target_id: z.string(), segment_id: z.string().optional() }).optional(),
           dispatch_blocked: z.object({ code: z.string() }).optional(),
         }),
